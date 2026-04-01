@@ -25,13 +25,32 @@ jobs:
       - name: Repository auschecken
         uses: actions/checkout@v4
 
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Veröffentlichungsordner vorbereiten
+        shell: bash
+        run: |
+          mkdir -p dist
+          rsync -av \
+            --exclude ".git" \
+            --exclude "node_modules" \
+            --exclude ".github" \
+            ./ ./dist/
+
       - name: GitHub Pages konfigurieren
         uses: actions/configure-pages@v5
 
       - name: Artefakt hochladen
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: ./dist
 
       - name: Auf GitHub Pages veröffentlichen
         id: deployment

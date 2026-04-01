@@ -2,7 +2,7 @@
 
 ![Palm-Pong preview](assets/siteOGImage.png)
 
-Palm Brick Breaker is an offline-first browser game where you control the paddle with your hand and webcam.
+Palm-Pong is an offline-first browser game where you control the paddle with your hand and webcam.
 This fork is highly inspired by the original camera-controlled brick-breaker concept, but it has been reworked
 to remove hosted services, install dependencies locally through `npm`, and run fully offline after setup.
 
