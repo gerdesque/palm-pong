@@ -1,839 +1,660 @@
-/*
-To do:
-Reduce general lag / improve fps, reduce lag when level up text shown
-Show that mediapipe hand tracker is currently loading
-Add better tutorial (allow the user to test the movement before starting the game)
-Create intro video (promo / instructions)
-Add button to show high score table (below game canvas)
-Ability to "skip" to higher levels?
-*/
+const MOBILE_BREAKPOINT = 760;
+const STORAGE_KEY = 'palm-brick-breaker-local-scores';
+const MAX_LEADERBOARD_ENTRIES = 10;
+const TRACKING_SAMPLE_RATE = 1000 / 30;
+const LEVEL_SPEED_MULTIPLIER = 1.1;
+const LEVEL_PADDLE_MULTIPLIER = 0.92;
+const MAX_PADDLE_OVERSCAN = 48;
 
-let cachedHighScores = null;
-let allScores = null;
-let highScoresFetched = false;
-
-let screenWidth = window.innerWidth;
-console.log("screen width: "+screenWidth);
-let widthThreshold = 700;
-const CANVAS_WIDTH = screenWidth >= widthThreshold ? 700 : 350;
-const CANVAS_HEIGHT = CANVAS_WIDTH;
-
+const dimensions = createDimensions();
 const canvas = document.getElementById('gameCanvas');
-canvas.width = CANVAS_WIDTH;
-canvas.height = CANVAS_HEIGHT;
-const ctx = canvas.getContext('2d', { alpha: false });
-
+const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 const video = document.getElementById('videoElement');
+
 const scoreElement = document.getElementById('scoreElement');
 const levelElement = document.getElementById('levelElement');
 const livesElement = document.getElementById('livesElement');
-const levelUpIndicator = document.getElementById('levelUpIndicator');
+const trackingStatus = document.getElementById('trackingStatus');
+const tutorialStatus = document.getElementById('tutorialStatus');
+const palmIndicator = document.getElementById('palmIndicator');
+const pauseOverlay = document.getElementById('pauseOverlay');
 
-let lastTime = 0;
-const FPS = 60;
-const frameDelay = 1000 / FPS;
-let processFrameID;
+const startButton = document.getElementById('startButton');
+const restartButton = document.getElementById('restartButton');
+const toggleLeaderboardButton = document.getElementById('toggleLeaderboardButton');
+const leaderboardPanel = document.getElementById('leaderboardPanel');
+const leaderboardContent = document.getElementById('leaderboardContent');
 
-const VIDEO_WIDTH = screenWidth >= widthThreshold ? 160 : 80;
-const VIDEO_HEIGHT = screenWidth >= widthThreshold ? 120 : 60;
-video.width = VIDEO_WIDTH;
-video.height = VIDEO_HEIGHT;
+const gameOverDialog = document.getElementById('gameOverDialog');
+const saveScoreForm = document.getElementById('saveScoreForm');
+const skipScoreButton = document.getElementById('skipScoreButton');
+const playerNameInput = document.getElementById('playerNameInput');
+const finalLevel = document.getElementById('finalLevel');
+const finalScore = document.getElementById('finalScore');
 
-const INITIAL_PADDLE_WIDTH = screenWidth >= widthThreshold ? 150 : 75;
-const PADDLE_HEIGHT = screenWidth >= widthThreshold ? 15 : 8;
-const BALL_RADIUS = screenWidth >= widthThreshold ? 8 : 6;
-const BRICK_ROW_COUNT = 3;
-const BRICK_COLUMN_COUNT = 8;
-const BRICK_WIDTH = screenWidth >= widthThreshold ? 65 : 32;
-const BRICK_HEIGHT = screenWidth >= widthThreshold ? 20 : 10;
-const BRICK_PADDING = screenWidth >= widthThreshold ? 8 : 4;
-const BRICK_OFFSET_TOP = screenWidth >= widthThreshold ? 50 : 25;
-const BRICK_OFFSET_LEFT = screenWidth >= widthThreshold ? 58 : 29;
-const INITIAL_LIVES = 3;
-const PADDLE_BOTTOM_OFFSET = screenWidth >= widthThreshold ? 30 : 15;
-const BALL_BOTTOM_OFFSET = screenWidth >= widthThreshold ? 40 : 20;
+canvas.width = dimensions.canvas;
+canvas.height = dimensions.canvas;
+video.width = dimensions.videoWidth;
+video.height = dimensions.videoHeight;
 
-// Level progression constants
-const INITIAL_BALL_SPEED = screenWidth >= widthThreshold ? 7 : 6;
-const LEVEL_SPEED_INCREASE = 1.1; // 10% increase
-const LEVEL_WIDTH_DECREASE = 0.9; // 10% decrease
+const BRICK_ROWS_MAX = 4;
+const BRICK_COLUMNS = 8;
+const BRICK_DATA_SIZE = 3;
+const bricks = new Float32Array(BRICK_ROWS_MAX * BRICK_COLUMNS * BRICK_DATA_SIZE);
 
-const gameState = {
-    level: 1,
-    lives: INITIAL_LIVES,
-    paddle: {
-        width: INITIAL_PADDLE_WIDTH,
-        height: PADDLE_HEIGHT,
-        x: CANVAS_WIDTH / 2 - INITIAL_PADDLE_WIDTH / 2,
-        y: CANVAS_HEIGHT - PADDLE_BOTTOM_OFFSET,
-    },
-    ball: {
-        x: CANVAS_WIDTH / 2,
-        y: CANVAS_HEIGHT - BALL_BOTTOM_OFFSET,
-        radius: BALL_RADIUS,
-        dx: INITIAL_BALL_SPEED,
-        dy: -INITIAL_BALL_SPEED,
-        speed: INITIAL_BALL_SPEED,
-        active: true
+const state = {
+    running: false,
+    gameOver: false,
+    awaitingLaunch: true,
+    modalDismissed: false,
+    handReady: false,
+    trackingReady: false,
+    trackingLost: false,
+    noHandFrames: 0,
+    trackingLastTick: 0,
+    paddleNormalizedX: 0.5,
+    leaderboard: loadLeaderboard(),
+    animationFrame: null,
+    hands: null,
+    videoStream: null,
+    lastFrameTime: 0,
+    notification: {
+        text: '',
+        until: 0,
+        tone: 'accent'
     },
     stats: {
+        level: 1,
+        lives: 3,
         score: 0,
         bricksRemaining: 0
     },
-    notification: {
-        text: '',
-        opacity: 0,
-        fadeStart: 0
+    paddle: {
+        width: dimensions.initialPaddleWidth,
+        height: dimensions.paddleHeight,
+        x: dimensions.canvas / 2 - dimensions.initialPaddleWidth / 2,
+        y: dimensions.canvas - dimensions.paddleBottomOffset
     },
-    gameStarted: false,
-    modalDismissed: false,
-    gameOver: false,
+    ball: {
+        x: dimensions.canvas / 2,
+        y: dimensions.canvas - dimensions.ballBottomOffset,
+        radius: dimensions.ballRadius,
+        dx: dimensions.initialBallSpeed,
+        dy: -dimensions.initialBallSpeed,
+        speed: dimensions.initialBallSpeed,
+        active: true
+    }
 };
 
-const bricks = new Float32Array(BRICK_ROW_COUNT * BRICK_COLUMN_COUNT * 3); // x, y, status
-
-function getBrickRowCount(level) {
-    if (level === 1) return 1;
-    if (level === 2) return 2;
-    return 3; // Level 3 and higher
+function createDimensions() {
+    const isCompact = window.innerWidth < MOBILE_BREAKPOINT;
+    const canvasSize = isCompact ? 360 : 720;
+    return {
+        compact: isCompact,
+        canvas: canvasSize,
+        videoWidth: isCompact ? 96 : 176,
+        videoHeight: isCompact ? 72 : 132,
+        initialPaddleWidth: isCompact ? 88 : 160,
+        paddleHeight: isCompact ? 9 : 16,
+        ballRadius: isCompact ? 6 : 9,
+        initialBallSpeed: isCompact ? 5.2 : 6.4,
+        brickWidth: isCompact ? 37 : 76,
+        brickHeight: isCompact ? 12 : 24,
+        brickPadding: isCompact ? 5 : 10,
+        brickOffsetTop: isCompact ? 72 : 108,
+        brickOffsetLeft: isCompact ? 17 : 31,
+        paddleBottomOffset: isCompact ? 24 : 36,
+        ballBottomOffset: isCompact ? 34 : 50
+    };
 }
 
-// Initialize bricks with TypedArray
+function getVisibleBrickRows(level) {
+    if (level === 1) return 2;
+    if (level === 2) return 3;
+    return 4;
+}
+
+function resetBall() {
+    state.awaitingLaunch = true;
+    state.ball.active = true;
+    state.ball.x = state.paddle.x + state.paddle.width / 2;
+    state.ball.y = state.paddle.y - state.ball.radius - 2;
+    state.ball.dx = state.ball.speed * (Math.random() > 0.5 ? 1 : -1);
+    state.ball.dy = -state.ball.speed;
+}
+
 function initBricks() {
-    const rowCount = getBrickRowCount(gameState.level);
-    gameState.stats.bricksRemaining = rowCount * BRICK_COLUMN_COUNT;
-    
-    // Clear existing bricks first
     bricks.fill(0);
-    
-    for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
-        for (let r = 0; r < rowCount; r++) {
-            const idx = (c * BRICK_ROW_COUNT + r) * 3;
-            bricks[idx] = c * (BRICK_WIDTH + BRICK_PADDING) + BRICK_OFFSET_LEFT; // x
-            bricks[idx + 1] = r * (BRICK_HEIGHT + BRICK_PADDING) + BRICK_OFFSET_TOP; // y
-            bricks[idx + 2] = 1; // status
+    const rows = getVisibleBrickRows(state.stats.level);
+    state.stats.bricksRemaining = rows * BRICK_COLUMNS;
+
+    for (let column = 0; column < BRICK_COLUMNS; column += 1) {
+        for (let row = 0; row < rows; row += 1) {
+            const index = (column * BRICK_ROWS_MAX + row) * BRICK_DATA_SIZE;
+            bricks[index] = column * (dimensions.brickWidth + dimensions.brickPadding) + dimensions.brickOffsetLeft;
+            bricks[index + 1] = row * (dimensions.brickHeight + dimensions.brickPadding) + dimensions.brickOffsetTop;
+            bricks[index + 2] = 1;
         }
     }
 }
 
-// Update lives display
-function updateLivesDisplay() {
-    livesElement.textContent = '💛'.repeat(gameState.lives);
+function updateHud() {
+    scoreElement.textContent = String(state.stats.score);
+    levelElement.textContent = String(state.stats.level);
+    livesElement.textContent = Array.from({ length: state.stats.lives }, () => '[*]').join(' ');
 }
 
-function drawNotification() {
-    if (gameState.notification.opacity <= 0) return;
-    
-    const currentTime = performance.now();
-    const elapsed = currentTime - gameState.notification.fadeStart;
-    const duration = 2000; // 2 seconds to fade out
-    
-    gameState.notification.opacity = Math.max(0, 1 - (elapsed / duration));
-    
-    if (gameState.notification.opacity > 0) {
-        ctx.save();
-        ctx.globalAlpha = gameState.notification.opacity;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 24px "IBM Plex Mono"';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(gameState.notification.text, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-        ctx.restore();
-    }
+function setTrackingState(mode, message) {
+    trackingStatus.textContent = message;
+    trackingStatus.className = `status-pill ${mode}`;
+    tutorialStatus.textContent = message;
 }
 
-async function setupHandTracking() {
-  let hands;
-  let noHandFrames = 0;
-  const NO_HAND_THRESHOLD = 60;
-  let positionBuffer = new Array(5).fill(null);
-  let lastProcessedTime = 0;
-  const PROCESS_INTERVAL = 1000 / 30;
-  let videoStream = null;
-  let isProcessingFrame = false;
-  let handTrackingActive = false;
-  let wasGameRunning = false;
-  let pauseOverlay = null;
-
-  const isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
-
-  // Configure video element
-  video.autoplay = true;
-  video.playsInline = true;
-  video.muted = true;
-
-  function createPauseOverlay() {
-    pauseOverlay = document.createElement('div');
-    pauseOverlay.className = 'pause-overlay';
-    pauseOverlay.style.position = 'absolute';
-    pauseOverlay.style.top = '50%';
-    pauseOverlay.style.left = '50%';
-    pauseOverlay.style.transform = 'translate(-50%, -50%)';
-    pauseOverlay.style.background = 'rgba(0, 0, 0, 0.8)';
-    pauseOverlay.style.color = 'white';
-    pauseOverlay.style.padding = '20px';
-    pauseOverlay.style.borderRadius = '10px';
-    pauseOverlay.style.zIndex = '1000';
-    pauseOverlay.style.textAlign = 'center';
-    pauseOverlay.style.display = 'none';
-    pauseOverlay.innerHTML = `
-      <p style="color: #ff4444; margin-bottom: 10px;">Hand Tracking Lost</p>
-      <p>Please ensure your palm is visible to the camera.</p>
-      <p>Try moving farther away from the camera and/or tilting your camera down a bit.</p>
-      <p>The game will resume when hand-tracking is restored.</p>
-    `;
-    document.querySelector('.game-container').appendChild(pauseOverlay);
-    return pauseOverlay;
-  }
-
-  function pauseGame() {
-    if (gameState.gameStarted && !gameState.gameOver) {
-      wasGameRunning = true;
-      gameState.gameStarted = false;
-      if (!pauseOverlay) {
-        pauseOverlay = createPauseOverlay();
-      }
-      pauseOverlay.style.display = 'block';
-    }
-  }
-
-  function resumeGame() {
-    if (wasGameRunning && !gameState.gameOver) {
-      gameState.gameStarted = true;
-      wasGameRunning = false;
-      if (pauseOverlay) {
-        pauseOverlay.style.display = 'none';
-      }
-    }
-  }
-
-  async function initializeHandTracking() {
-    try {
-      // Initialize MediaPipe Hands with fallback CDN
-      const mediapipeCDNs = [
-        'https://cdn.jsdelivr.net/npm/@mediapipe/hands/',
-        'https://unpkg.com/@mediapipe/hands/',
-        'https://www.gstatic.com/mediapipe/hands/'
-      ];
-
-      let loadError;
-      for (const cdn of mediapipeCDNs) {
-        try {
-          hands = new window.Hands({
-            locateFile: (file) => `${cdn}${file}`
-          });
-          loadError = null;
-          break;
-        } catch (error) {
-          loadError = error;
-          console.warn(`Failed to load from ${cdn}:`, error);
-          continue;
-        }
-      }
-
-      if (loadError) {
-        throw loadError;
-      }
-
-      // Configure hand tracking options
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 0,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      });
-
-      // Set up results handler with error recovery
-      hands.onResults((results) => {
-        const now = performance.now();
-        if (now - lastProcessedTime < PROCESS_INTERVAL) return;
-        lastProcessedTime = now;
-        
-        if (results.multiHandLandmarks?.[0]) {
-          noHandFrames = 0;
-          const rawX = results.multiHandLandmarks[0][0].x;
-          const palmX = 1.4 - (rawX * 1.8);
-          
-          positionBuffer.shift();
-          positionBuffer.push(palmX);
-          
-          const weights = [0.1, 0.15, 0.2, 0.25, 0.3];
-          let smoothedX = 0;
-          let totalWeight = 0;
-          
-          for (let i = 0; i < positionBuffer.length; i++) {
-            if (positionBuffer[i] !== null) {
-              smoothedX += positionBuffer[i] * weights[i];
-              totalWeight += weights[i];
-            }
-          }
-          
-          if (totalWeight > 0) {
-            smoothedX /= totalWeight;
-            // lastHandPosition = smoothedX;
-            
-            const alpha = 0.5;
-            const currentPaddleX = (gameState.paddle.x + gameState.paddle.width/2) / CANVAS_WIDTH;
-            smoothedX = (alpha * smoothedX) + ((1 - alpha) * currentPaddleX);
-            
-            const targetX = (smoothedX * CANVAS_WIDTH) - (gameState.paddle.width / 2);
-            gameState.paddle.x = Math.max(
-              -65, 
-              Math.min(CANVAS_WIDTH - gameState.paddle.width + 65, targetX)
-            );
-
-            video.style.border = "2px solid #3a4c4e";
-            handTrackingActive = true;
-
-            if (!gameState.gameStarted && gameState.modalDismissed && !wasGameRunning) {
-              gameState.gameStarted = true;
-            } else if (handTrackingActive && wasGameRunning) {
-              resumeGame();
-            }
-          }
-        } else {
-          noHandFrames++;
-          if (noHandFrames > NO_HAND_THRESHOLD) {
-            video.style.border = "6px solid rgb(225, 21, 21)";
-            if (handTrackingActive) {
-              handTrackingActive = false;
-              pauseGame();
-            }
-          }
-        }
-      });
-
-      return hands;
-    } catch (error) {
-      console.error('Error initializing hand tracking:', error);
-      return null;
-    }
-  }
-
-  // Enhanced camera initialization
-  async function startCamera() {
-    try {
-      const permission = await navigator.permissions.query({ name: 'camera' });
-      if (permission.state === 'denied') {
-        throw new Error('Camera permission denied');
-      }
-
-      const constraints = {
-        video: {
-          width: { min: 320, ideal: 640, max: 1280 },
-          height: { min: 240, ideal: 480, max: 720 },
-          frameRate: { min: 15, ideal: 30, max: 60 },
-          facingMode: "user"
-        }
-      };
-
-      videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-      video.srcObject = videoStream;
-      
-      await new Promise((resolve, reject) => {
-        video.onloadedmetadata = resolve;
-        video.onerror = reject;
-      });
-
-      await video.play();
-      hands = await initializeHandTracking();
-      
-      // Start processing frames
-      processFrameID = requestAnimationFrame(processFrame);
-      return true;
-    } catch (error) {
-      console.error('Error starting camera:', error);
-      throw error;
-    }
-  }
-
-  async function processFrame() {
-    if (!hands || !videoStream || isProcessingFrame) {
-      requestAnimationFrame(processFrame);
-      return;
-    }
-
-    isProcessingFrame = true;
-
-    try {
-      await hands.send({ image: video });
-    } catch (error) {
-      console.error('Error processing frame:', error);
-      cancelAnimationFrame(processFrameID);
-      await startCamera();
-    }
-
-    isProcessingFrame = false;
-    processFrameID = requestAnimationFrame(processFrame);
-  }
-
-  try {
-    const success = await startCamera();
-    if (!success) {
-      throw new Error('Failed to initialize camera');
-    }
-  } catch (error) {
-    console.error('Setup error:', error);
-  }
+function setNotification(text, tone = 'accent', duration = 1500) {
+    state.notification.text = text;
+    state.notification.tone = tone;
+    state.notification.until = performance.now() + duration;
 }
 
-// Level up function
+function syncPaddleWithTracking() {
+    const targetX = state.paddleNormalizedX * dimensions.canvas - state.paddle.width / 2;
+    state.paddle.x = clamp(targetX, -MAX_PADDLE_OVERSCAN, dimensions.canvas - state.paddle.width + MAX_PADDLE_OVERSCAN);
+}
+
+function beginGame() {
+    state.running = true;
+    state.awaitingLaunch = false;
+    state.modalDismissed = true;
+    startButton.textContent = 'Tracking active';
+    startButton.disabled = true;
+    setNotification('Go!', 'accent', 900);
+}
+
+function pauseForTrackingLoss() {
+    if (!state.running || state.gameOver) return;
+    state.running = false;
+    state.trackingLost = true;
+    pauseOverlay.classList.remove('hidden');
+    setTrackingState('status-lost', 'Hand lost');
+}
+
+function resumeAfterTrackingRecovery() {
+    if (!state.modalDismissed || state.gameOver || !state.trackingLost) return;
+    state.running = true;
+    state.trackingLost = false;
+    pauseOverlay.classList.add('hidden');
+    setTrackingState('status-ready', 'Ready');
+}
+
+function loseLife() {
+    state.stats.lives -= 1;
+    updateHud();
+
+    if (state.stats.lives <= 0) {
+        finishGame();
+        return;
+    }
+
+    resetBall();
+    setNotification(`${state.stats.lives} lives left`, 'warn');
+}
+
 function levelUp() {
-  gameState.level++;
-  levelElement.textContent = gameState.level;
-  
-  // Increase ball speed by 10%
-  gameState.ball.speed *= LEVEL_SPEED_INCREASE;
-  gameState.ball.dx = gameState.ball.speed * (gameState.ball.dx > 0 ? 1 : -1);
-  gameState.ball.dy = gameState.ball.speed * (gameState.ball.dy > 0 ? 1 : -1);
-  
-  // Decrease paddle width by 10%
-  gameState.paddle.width *= LEVEL_WIDTH_DECREASE;
-  
-  // Show level up indicator
-  levelUpIndicator.style.opacity = '1';
-  setTimeout(() => {
-      levelUpIndicator.style.opacity = '0';
-  }, 2000);
-  
-  // Reset ball position
-  gameState.ball.active = true;
-  gameState.ball.x = gameState.paddle.x + gameState.paddle.width/2;
-  gameState.ball.y = gameState.paddle.y - BALL_RADIUS;
-  
-  // Initialize new level
-  initBricks();
+    state.stats.level += 1;
+    state.ball.speed *= LEVEL_SPEED_MULTIPLIER;
+    state.paddle.width = Math.max(dimensions.compact ? 56 : 96, state.paddle.width * LEVEL_PADDLE_MULTIPLIER);
+    updateHud();
+    initBricks();
+    resetBall();
+    setNotification(`Level ${state.stats.level}`, 'accent', 1800);
 }
 
-// Handle ball miss
-function handleBallMiss() {
-  gameState.lives--;
-  updateLivesDisplay();
-  
-  if (gameState.lives <= 0) {
-      console.log("game over");
-      gameState.ball.active = false;
-      handleGameOver();
-  } else {
-      // Show notification
-      gameState.notification.text = `${gameState.lives} ${gameState.lives === 1 ? 'life' : 'lives'} remaining`;
-      gameState.notification.opacity = 1;
-      gameState.notification.fadeStart = performance.now();
-
-      // Reset ball position but keep playing
-      gameState.ball.active = true;
-      gameState.ball.x = gameState.paddle.x + gameState.paddle.width/2;
-      gameState.ball.y = gameState.paddle.y - BALL_RADIUS;
-      gameState.ball.dx = gameState.ball.speed * (Math.random() > 0.5 ? 1 : -1);
-      gameState.ball.dy = -gameState.ball.speed;
-  }
-}
-
-function drawBricks() {
-  ctx.fillStyle = '#FF3333';
-  ctx.beginPath();
-  for (let i = 0; i < bricks.length; i += 3) {
-      if (bricks[i + 2] === 1) {
-          ctx.rect(bricks[i], bricks[i + 1], BRICK_WIDTH, BRICK_HEIGHT);
-      }
-  }
-  ctx.fill();
-}
-
-function drawGame() {
-  // Draw paddle
-  ctx.fillStyle = '#3399CC';
-  ctx.fillRect(gameState.paddle.x, gameState.paddle.y, gameState.paddle.width, PADDLE_HEIGHT);
-
-  // Draw ball
-  if (gameState.ball.active) {
-      ctx.fillStyle = '#33FF99';
-      ctx.beginPath();
-      ctx.arc(gameState.ball.x, gameState.ball.y, BALL_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-  }
-}
-
-function checkWinCondition() {
-  if (gameState.stats.bricksRemaining === 0) {
-      levelUp();
-      return true;
-  }
-  return false;
-}
-
-function collisionDetection() {
-  if (!gameState.ball.active) return;
-
-  const ballGridX = Math.floor((gameState.ball.x - BRICK_OFFSET_LEFT) / (BRICK_WIDTH + BRICK_PADDING));
-  const ballGridY = Math.floor((gameState.ball.y - BRICK_OFFSET_TOP) / (BRICK_HEIGHT + BRICK_PADDING));
-
-  // Check only nearby bricks
-  for (let c = Math.max(0, ballGridX - 1); c <= Math.min(BRICK_COLUMN_COUNT - 1, ballGridX + 1); c++) {
-      for (let r = Math.max(0, ballGridY - 1); r <= Math.min(BRICK_ROW_COUNT - 1, ballGridY + 1); r++) {
-          const idx = (c * BRICK_ROW_COUNT + r) * 3;
-          if (bricks[idx + 2] === 1) {
-              if (gameState.ball.x > bricks[idx] && 
-                  gameState.ball.x < bricks[idx] + BRICK_WIDTH && 
-                  gameState.ball.y > bricks[idx + 1] && 
-                  gameState.ball.y < bricks[idx + 1] + BRICK_HEIGHT) {
-                  gameState.ball.dy = -gameState.ball.dy;
-                  bricks[idx + 2] = 0;
-                  gameState.stats.score += 1;
-                  gameState.stats.bricksRemaining--;
-                  scoreElement.textContent = gameState.stats.score;
-                  checkWinCondition();
-              }
-          }
-      }
-  }
-}
-
-//Main game loop with frame timing
-function gameLoop(timestamp) {
-  if (timestamp - lastTime >= frameDelay) {
-      lastTime = timestamp;
-
-      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      ctx.fillStyle = "#141D22";
-      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      
-      if (gameState.gameStarted && gameState.ball.active && !gameState.gameOver) {
-          // Ball physics
-          if (gameState.ball.x + gameState.ball.dx > CANVAS_WIDTH - BALL_RADIUS || 
-              gameState.ball.x + gameState.ball.dx < BALL_RADIUS) {
-              gameState.ball.dx = -gameState.ball.dx;
-          }
-          if (gameState.ball.y + gameState.ball.dy < BALL_RADIUS) {
-              gameState.ball.dy = -gameState.ball.dy;
-          }
-
-          // Paddle collision
-          if (gameState.ball.dy > 0 && 
-              gameState.ball.y + gameState.ball.dy > gameState.paddle.y - (BALL_RADIUS / 2) ) {
-              if (gameState.ball.x > gameState.paddle.x && 
-                  gameState.ball.x < gameState.paddle.x + gameState.paddle.width) {
-                  const hitPoint = (gameState.ball.x - gameState.paddle.x) / gameState.paddle.width;
-                  const maxAngle = Math.PI / 3;
-                  const angle = (hitPoint * 2 - 1) * maxAngle;
-                  const speed = Math.sqrt(gameState.ball.dx * gameState.ball.dx + 
-                                       gameState.ball.dy * gameState.ball.dy);
-                  
-                  gameState.ball.dx = Math.sin(angle) * speed;
-                  gameState.ball.dy = -Math.cos(angle) * speed;
-
-              } else if (gameState.ball.y > CANVAS_HEIGHT + BALL_RADIUS) {
-                  handleBallMiss();
-              }
-          }
-
-          gameState.ball.x += gameState.ball.dx;
-          gameState.ball.y += gameState.ball.dy;
-      } else {
-          gameState.ball.x = gameState.paddle.x + gameState.paddle.width/2;
-          gameState.ball.y = gameState.paddle.y - BALL_RADIUS;
-      }
-
-      drawBricks();
-      drawGame();
-      drawNotification();
-      collisionDetection();
-  }
-
-  requestAnimationFrame(gameLoop);
-}
-
-const HIGHSCORE_URL = window.config.HIGHSCORE_URL;
-
-async function getHighScores() {
-  if (!cachedHighScores) {
-      // If we haven't cached the scores yet, try to fetch them
-      await fetchHighScoresInBackground();
-  }
-  return cachedHighScores;
-}
-
-// Function to insert current score into cached high scores
-function insertCurrentScore(currentScore, playerName, level) {
-  if (!cachedHighScores) {
-      cachedHighScores = [];
-  }
-
-  // Create new score entry
-  const newScore = [playerName, currentScore, level];
-  
-  // Find the correct position to insert the new score
-  let insertIndex = cachedHighScores.findIndex(score => currentScore > score[1]);
-  if (insertIndex === -1) {
-      insertIndex = cachedHighScores.length;
-  }
-  
-  // Insert the new score
-  cachedHighScores.splice(insertIndex, 0, newScore);
-  
-  // Keep only top 10 scores
-  if (cachedHighScores.length > 10) {
-      cachedHighScores = cachedHighScores.slice(0, 10);
-  }
-  
-  return cachedHighScores;
-}
-
-// Submit a new score to Google Sheets
-async function submitScore(name, score, level) {
-    try {
-        const response = await fetch(HIGHSCORE_URL, {
-            method: 'POST',
-            body: JSON.stringify({ 
-                name: name.substring(0, 20), // Limit name length
-                score: score,
-                level: level
-            })
-        });
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
-        }
-        return true;
-    } catch (error) {
-        console.error('Error submitting score:', error);
-        return false;
+function finishGame() {
+    state.running = false;
+    state.gameOver = true;
+    state.ball.active = false;
+    finalLevel.textContent = String(state.stats.level);
+    finalScore.textContent = String(state.stats.score);
+    playerNameInput.value = '';
+    if (typeof gameOverDialog.showModal === 'function' && !gameOverDialog.open) {
+        gameOverDialog.showModal();
     }
-}
-
-// Modified handleGameOver function
-async function handleGameOver() {
-  // First show regular game over screen
-  const gameOverModal = document.getElementById('gameOverModal');
-  document.getElementById('finalLevel').textContent = "Level " + gameState.level;
-  document.getElementById('finalScore').textContent = gameState.stats.score;
-  
-  // Show the game over modal
-  let highScoreTable = document.querySelector(".high-scores");
-  if (highScoreTable) {
-      highScoreTable.classList.add("hidden");
-  }
-  gameOverModal.style.display = 'flex';
-  
-  // Add slight delay so game over screen is visible first
-  let playerName;
-  setTimeout(() => {
-      playerName = prompt("Enter your name for the leaderboard:", "Player");
-      if (playerName) {
-          handleHighScores(playerName);
-      }
-  }, 500);
-  
-  gameState.gameStarted = false;
-  gameState.gameOver = true;
-}
-
-async function handleHighScores(playerName) {
-  const loadingText = document.querySelector('.loading-text');
-  loadingText.classList.remove("hidden");
-  
-  // If we haven't fetched high scores yet, do it now
-  if (!cachedHighScores) {
-      await fetchHighScoresInBackground();
-  }
-  
-  // Insert current score into cached high scores
-  const updatedScores = insertCurrentScore(
-      gameState.stats.score,
-      playerName,
-      gameState.level
-  );
-  
-  // Display high scores immediately using cached data
-  displayHighScores(updatedScores);
-  document.querySelector(".high-scores").classList.remove("hidden");
-  loadingText.classList.add("hidden");
-  
-  // Submit score in the background
-  submitScore(playerName, gameState.stats.score, gameState.level)
-      .catch(error => {
-          console.error('Error submitting score:', error);
-      });
-}
-
-// Calculate the percentile rank of a score within all scores
-function calculatePercentileRank(currentScore, scores) {
-  if (!scores || scores.length === 0) return 0;
-
-  // Convert current score to number and scores array to numbers
-  currentScore = Number(currentScore);
-  const scoreValues = scores.map(score => Number(score[1]));
-
-  // Count how many scores are lower than the current score
-  const scoresBelow = scoreValues.filter(score => score < currentScore).length;
-  
-  // Calculate percentile (handling edge cases)
-  if (scoresBelow === 0) return 0;
-  if (scoresBelow === scoreValues.length) return 100;
-  
-  // Calculate percentile rank - ensure floating point division
-  const percentile = (scoresBelow / scoreValues.length) * 100;
-  
-  return percentile;
-}
-
-// Create the percentile message element
-function createPercentileMessage(percentile, currentScore) {
-  const messageDiv = document.createElement('div');
-  messageDiv.className = 'percentile-message';
-  messageDiv.style.textAlign = 'center';
-  messageDiv.style.marginTop = '15px';
-  messageDiv.style.padding = '10px';
-  messageDiv.style.backgroundColor = 'rgba(51, 255, 153, 0.1)';
-  messageDiv.style.borderRadius = '5px';
-  messageDiv.style.color = '#33FF99';
-  messageDiv.style.fontWeight = 'bold';
-  messageDiv.textContent = `Your score of ${currentScore} is better than ${parseFloat(percentile).toFixed(1)}% of all players`;
-  return messageDiv;
-}
-
-function displayHighScores(topScores) {
-  if (!topScores) return;
-  
-  // Calculate percentile for current score
-  const percentile = calculatePercentileRank(gameState.stats.score, allScores);
-  
-  // Create high scores HTML
-  const highScoresHTML = `
-      <div class="high-scores">
-          <h3>Top 10 High Scores</h3>
-          <div class="scores-list">
-              ${topScores.map((score, index) => `
-                  <div class="score-entry ${gameState.stats.score === score[1] ? 'current-score' : ''}">
-                      <span class="rank">${index + 1}</span>
-                      <span class="name">${score[0]}</span>
-                      <span class="level">Level ${score[2]}</span>
-                      <span class="score">${score[1]}</span>
-                  </div>
-              `).join('')}
-          </div>
-      </div>
-  `;
-  
-  // Find or create high scores container
-  let highScoresContainer = document.querySelector('.high-scores');
-  const modalContent = document.querySelector('#gameOverModal .modal-content');
-  
-  if (!highScoresContainer) {
-      const container = document.createElement('div');
-      container.innerHTML = highScoresHTML;
-      const restartButton = modalContent.querySelector('.restart-button');
-      modalContent.insertBefore(container, restartButton);
-      highScoresContainer = container.querySelector('.high-scores');
-  } else {
-      highScoresContainer.outerHTML = highScoresHTML;
-      highScoresContainer = document.querySelector('.high-scores');
-  }
-  
-  // Remove existing percentile message if it exists
-  const existingMessage = modalContent.querySelector('.percentile-message');
-  if (existingMessage) {
-      existingMessage.remove();
-  }
-  
-  // Add percentile message
-  const percentileMessage = createPercentileMessage(percentile, gameState.stats.score);
-  if (highScoresContainer) {
-      highScoresContainer.appendChild(percentileMessage);
-  }
-}
-
-function closeGameOverModal() {
-  const gameOverModal = document.getElementById('gameOverModal');
-  gameOverModal.style.display = 'none';
 }
 
 function restartGame() {
-  gameState.level = 1;
-  levelElement.textContent = '1';
-  
-  gameState.lives = INITIAL_LIVES;
-  updateLivesDisplay();
-  
-  gameState.paddle.width = INITIAL_PADDLE_WIDTH;
-  
-  gameState.ball.speed = INITIAL_BALL_SPEED;
-  gameState.ball.dx = INITIAL_BALL_SPEED;
-  gameState.ball.dy = -INITIAL_BALL_SPEED;
-  
-  gameState.stats.score = 0;
-  scoreElement.textContent = '0';
-  
-  gameState.notification = {
-      text: '',
-      opacity: 0,
-      fadeStart: 0
-  };
-  
-  gameState.ball.active = true;
-  gameState.ball.x = gameState.paddle.x + gameState.paddle.width/2;
-  gameState.ball.y = gameState.paddle.y - BALL_RADIUS;
+    state.running = false;
+    state.gameOver = false;
+    state.awaitingLaunch = true;
+    state.stats.level = 1;
+    state.stats.lives = 3;
+    state.stats.score = 0;
+    state.paddle.width = dimensions.initialPaddleWidth;
+    state.ball.speed = dimensions.initialBallSpeed;
+    state.trackingLost = false;
+    pauseOverlay.classList.add('hidden');
+    updateHud();
+    initBricks();
+    syncPaddleWithTracking();
+    resetBall();
 
-  gameState.gameOver = false;
+    if (gameOverDialog.open) {
+        gameOverDialog.close();
+    }
 
-  initBricks();
-  
-  document.getElementById('gameOverModal').style.display = 'none';
-  
-  gameState.gameStarted = true;
-  gameState.modalDismissed = true;
-
-  // Give the ball an initial direction
-  gameState.ball.dx = INITIAL_BALL_SPEED * (Math.random() > 0.5 ? 1 : -1);
-  gameState.ball.dy = -INITIAL_BALL_SPEED;
+    if (state.handReady) {
+        startButton.textContent = 'Start game';
+        startButton.disabled = false;
+        setTrackingState('status-ready', 'Ready');
+    } else {
+        startButton.textContent = 'Finding your hand...';
+        startButton.disabled = true;
+        setTrackingState('status-loading', 'Loading');
+    }
 }
 
-function startGame() {
-  document.getElementById('startModal').style.display = 'none';
-  gameState.modalDismissed = true;
-  video.style.opacity = 0.45;
+function drawBackground() {
+    ctx.fillStyle = '#061018';
+    ctx.fillRect(0, 0, dimensions.canvas, dimensions.canvas);
+
+    ctx.strokeStyle = 'rgba(100, 190, 255, 0.08)';
+    ctx.lineWidth = 1;
+
+    for (let x = 0; x < dimensions.canvas; x += dimensions.compact ? 24 : 32) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, dimensions.canvas);
+        ctx.stroke();
+    }
+
+    for (let y = 0; y < dimensions.canvas; y += dimensions.compact ? 24 : 32) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(dimensions.canvas, y);
+        ctx.stroke();
+    }
 }
 
-//add smooth scroll behaviour to anchor tag link
-document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-  anchor.addEventListener('click', function (e) {
-      e.preventDefault();
+function drawBricks() {
+    for (let index = 0; index < bricks.length; index += BRICK_DATA_SIZE) {
+        if (bricks[index + 2] !== 1) continue;
 
-      document.querySelector(this.getAttribute('href')).scrollIntoView({
-          behavior: 'smooth'
-      });
-  });
+        const x = bricks[index];
+        const y = bricks[index + 1];
+        const gradient = ctx.createLinearGradient(x, y, x + dimensions.brickWidth, y + dimensions.brickHeight);
+        gradient.addColorStop(0, '#ffba49');
+        gradient.addColorStop(1, '#ff6b57');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x, y, dimensions.brickWidth, dimensions.brickHeight);
+        ctx.strokeStyle = 'rgba(8, 20, 29, 0.4)';
+        ctx.strokeRect(x + 0.5, y + 0.5, dimensions.brickWidth - 1, dimensions.brickHeight - 1);
+    }
+}
+
+function drawPaddleAndBall() {
+    const paddleGradient = ctx.createLinearGradient(state.paddle.x, state.paddle.y, state.paddle.x + state.paddle.width, state.paddle.y);
+    paddleGradient.addColorStop(0, '#52d1ff');
+    paddleGradient.addColorStop(1, '#8cff9d');
+    ctx.fillStyle = paddleGradient;
+    ctx.fillRect(state.paddle.x, state.paddle.y, state.paddle.width, state.paddle.height);
+
+    if (!state.ball.active) return;
+
+    ctx.fillStyle = '#f1fff5';
+    ctx.beginPath();
+    ctx.arc(state.ball.x, state.ball.y, state.ball.radius, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+function drawCenterMessage() {
+    if (!state.notification.text || performance.now() > state.notification.until) return;
+
+    const opacity = Math.max(0, (state.notification.until - performance.now()) / 500);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, opacity + 0.2);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = dimensions.compact ? 'bold 26px monospace' : 'bold 42px monospace';
+    ctx.fillStyle = state.notification.tone === 'warn' ? '#ffb1a8' : '#8cff9d';
+    ctx.fillText(state.notification.text, dimensions.canvas / 2, dimensions.canvas / 2);
+    ctx.restore();
+}
+
+function drawAwaitingLaunchHint() {
+    if (!state.awaitingLaunch || state.gameOver || state.running) return;
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = dimensions.compact ? '16px monospace' : '20px monospace';
+    ctx.fillStyle = 'rgba(232, 251, 255, 0.8)';
+    ctx.fillText('Warm up with your palm, then press Start', dimensions.canvas / 2, dimensions.canvas - 28);
+    ctx.restore();
+}
+
+function updateBall(dt) {
+    if (!state.running || state.awaitingLaunch || !state.ball.active) {
+        state.ball.x = state.paddle.x + state.paddle.width / 2;
+        state.ball.y = state.paddle.y - state.ball.radius - 2;
+        return;
+    }
+
+    state.ball.x += state.ball.dx * dt;
+    state.ball.y += state.ball.dy * dt;
+
+    if (state.ball.x >= dimensions.canvas - state.ball.radius || state.ball.x <= state.ball.radius) {
+        state.ball.dx *= -1;
+        state.ball.x = clamp(state.ball.x, state.ball.radius, dimensions.canvas - state.ball.radius);
+    }
+
+    if (state.ball.y <= state.ball.radius) {
+        state.ball.dy *= -1;
+        state.ball.y = state.ball.radius;
+    }
+
+    const paddleTop = state.paddle.y;
+    const paddleBottom = state.paddle.y + state.paddle.height;
+    const nextBallBottom = state.ball.y + state.ball.radius;
+
+    if (
+        state.ball.dy > 0 &&
+        nextBallBottom >= paddleTop &&
+        state.ball.y <= paddleBottom &&
+        state.ball.x >= state.paddle.x &&
+        state.ball.x <= state.paddle.x + state.paddle.width
+    ) {
+        const relativeHit = (state.ball.x - state.paddle.x) / state.paddle.width;
+        const maxAngle = Math.PI / 3;
+        const angle = (relativeHit * 2 - 1) * maxAngle;
+        state.ball.dx = Math.sin(angle) * state.ball.speed;
+        state.ball.dy = -Math.cos(angle) * state.ball.speed;
+        state.ball.y = paddleTop - state.ball.radius - 1;
+    }
+
+    if (state.ball.y - state.ball.radius > dimensions.canvas + 4) {
+        loseLife();
+    }
+}
+
+function detectBrickCollision() {
+    if (!state.ball.active || state.awaitingLaunch) return;
+
+    const gridX = Math.floor((state.ball.x - dimensions.brickOffsetLeft) / (dimensions.brickWidth + dimensions.brickPadding));
+    const gridY = Math.floor((state.ball.y - dimensions.brickOffsetTop) / (dimensions.brickHeight + dimensions.brickPadding));
+
+    for (let column = Math.max(0, gridX - 1); column <= Math.min(BRICK_COLUMNS - 1, gridX + 1); column += 1) {
+        for (let row = Math.max(0, gridY - 1); row <= Math.min(BRICK_ROWS_MAX - 1, gridY + 1); row += 1) {
+            const index = (column * BRICK_ROWS_MAX + row) * BRICK_DATA_SIZE;
+            if (bricks[index + 2] !== 1) continue;
+
+            const x = bricks[index];
+            const y = bricks[index + 1];
+
+            const hit =
+                state.ball.x + state.ball.radius > x &&
+                state.ball.x - state.ball.radius < x + dimensions.brickWidth &&
+                state.ball.y + state.ball.radius > y &&
+                state.ball.y - state.ball.radius < y + dimensions.brickHeight;
+
+            if (!hit) continue;
+
+            bricks[index + 2] = 0;
+            state.stats.score += 1;
+            state.stats.bricksRemaining -= 1;
+            scoreElement.textContent = String(state.stats.score);
+            state.ball.dy *= -1;
+
+            if (state.stats.bricksRemaining <= 0) {
+                levelUp();
+            }
+            return;
+        }
+    }
+}
+
+function gameLoop(timestamp) {
+    if (!state.lastFrameTime) {
+        state.lastFrameTime = timestamp;
+    }
+
+    const dt = Math.min((timestamp - state.lastFrameTime) / (1000 / 60), 1.4);
+    state.lastFrameTime = timestamp;
+
+    drawBackground();
+    syncPaddleWithTracking();
+    updateBall(dt);
+    detectBrickCollision();
+    drawBricks();
+    drawPaddleAndBall();
+    drawCenterMessage();
+    drawAwaitingLaunchHint();
+
+    state.animationFrame = requestAnimationFrame(gameLoop);
+}
+
+function renderLeaderboard(highlight = null) {
+    if (!state.leaderboard.length) {
+        leaderboardContent.innerHTML = '<p class="empty-state">No local scores yet. Finish a run to seed the board.</p>';
+        return;
+    }
+
+    const rows = state.leaderboard
+        .map((entry, index) => {
+            const isHighlighted = highlight && entry.id === highlight;
+            return `
+                <div class="leaderboard-row${isHighlighted ? ' leaderboard-row-highlight' : ''}">
+                    <span class="leaderboard-rank">#${index + 1}</span>
+                    <strong>${escapeHtml(entry.name)}</strong>
+                    <span>${entry.score}</span>
+                    <span class="leaderboard-meta">Level ${entry.level}</span>
+                </div>
+            `;
+        })
+        .join('');
+
+    leaderboardContent.innerHTML = `<div class="leaderboard-list">${rows}</div>`;
+}
+
+function loadLeaderboard() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+        console.warn('Unable to load leaderboard from localStorage.', error);
+        return [];
+    }
+}
+
+function saveLeaderboard() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.leaderboard));
+}
+
+function submitLocalScore(name) {
+    const entry = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        name: name.trim() || 'Player',
+        score: state.stats.score,
+        level: state.stats.level
+    };
+
+    state.leaderboard = [...state.leaderboard, entry]
+        .sort((a, b) => (b.score - a.score) || (b.level - a.level))
+        .slice(0, MAX_LEADERBOARD_ENTRIES);
+
+    saveLeaderboard();
+    renderLeaderboard(entry.id);
+}
+
+async function initCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Camera access is not supported in this browser.');
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+            facingMode: 'user',
+            width: { ideal: 960 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30, max: 30 }
+        },
+        audio: false
+    });
+
+    state.videoStream = stream;
+    video.srcObject = stream;
+    await video.play();
+}
+
+function applyTrackingPosition(rawX) {
+    const normalized = clamp(1.26 - rawX * 1.52, 0, 1);
+    state.paddleNormalizedX = normalized;
+    palmIndicator.style.transform = `translateX(${(normalized - 0.5) * 100}%)`;
+}
+
+async function setupHandTracking() {
+    if (typeof window.Hands !== 'function') {
+        throw new Error('MediaPipe Hands failed to load from the local vendor folder.');
+    }
+
+    setTrackingState('status-loading', 'Loading hand tracking');
+    await initCamera();
+
+    state.hands = new window.Hands({
+        locateFile: (file) => `vendor/mediapipe/${file}`
+    });
+
+    state.hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 0,
+        minDetectionConfidence: 0.55,
+        minTrackingConfidence: 0.55
+    });
+
+    state.hands.onResults((results) => {
+        const now = performance.now();
+        if (now - state.trackingLastTick < TRACKING_SAMPLE_RATE) return;
+        state.trackingLastTick = now;
+
+        const hand = results.multiHandLandmarks?.[0];
+        if (!hand) {
+            state.noHandFrames += 1;
+            if (state.noHandFrames > 24) {
+                if (state.running) {
+                    pauseForTrackingLoss();
+                } else {
+                    state.handReady = false;
+                    startButton.disabled = true;
+                    startButton.textContent = 'Show your hand to start';
+                    setTrackingState('status-lost', 'Show your hand');
+                }
+            }
+            return;
+        }
+
+        state.noHandFrames = 0;
+        state.handReady = true;
+        applyTrackingPosition(hand[0].x);
+
+        if (!state.trackingReady) {
+            state.trackingReady = true;
+            startButton.disabled = false;
+            startButton.textContent = 'Start game';
+            setTrackingState('status-ready', 'Ready');
+        } else if (state.trackingLost) {
+            resumeAfterTrackingRecovery();
+        } else {
+            setTrackingState('status-ready', 'Ready');
+        }
+    });
+
+    const processVideo = async () => {
+        if (!state.hands || video.readyState < 2) {
+            requestAnimationFrame(processVideo);
+            return;
+        }
+
+        try {
+            await state.hands.send({ image: video });
+        } catch (error) {
+            console.error('Hand tracking frame failed.', error);
+            setTrackingState('status-lost', 'Tracking error');
+        }
+
+        requestAnimationFrame(processVideo);
+    };
+
+    requestAnimationFrame(processVideo);
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+}
+
+startButton.addEventListener('click', () => {
+    if (!state.handReady || state.gameOver) return;
+    beginGame();
 });
 
-// Function to fetch high scores in the background
-async function fetchHighScoresInBackground() {
-  if (highScoresFetched) return;
-  
-  try {
-      const response = await fetch(HIGHSCORE_URL);
-      if (!response.ok) {
-          throw new Error('Network response was not ok');
-      }
-      const data = await response.json();
-      // Store all scores for percentile calculation
-      allScores = data.scores;
-      // Store only top 10 for display
-      cachedHighScores = data.scores.slice(0, 10);
-      highScoresFetched = true;
-      console.log("high scores fetched");
-  } catch (error) {
-      console.error('Error fetching high scores:', error);
-      // We'll try again later if this fails
-      highScoresFetched = false;
-  }
-}
+restartButton.addEventListener('click', restartGame);
 
-// Start fetching high scores as soon as the game loads
-document.addEventListener('DOMContentLoaded', () => {
-  fetchHighScoresInBackground();
+toggleLeaderboardButton.addEventListener('click', () => {
+    const willShow = leaderboardPanel.classList.contains('hidden');
+    leaderboardPanel.classList.toggle('hidden', !willShow);
+    toggleLeaderboardButton.textContent = willShow ? 'Hide Leaderboard' : 'Show Leaderboard';
+    toggleLeaderboardButton.setAttribute('aria-expanded', String(willShow));
 });
 
-// Initialize game
-updateLivesDisplay();
+saveScoreForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitLocalScore(playerNameInput.value);
+    if (gameOverDialog.open) {
+        gameOverDialog.close();
+    }
+    leaderboardPanel.classList.remove('hidden');
+    toggleLeaderboardButton.textContent = 'Hide Leaderboard';
+    toggleLeaderboardButton.setAttribute('aria-expanded', 'true');
+    restartGame();
+});
+
+skipScoreButton.addEventListener('click', () => {
+    if (gameOverDialog.open) {
+        gameOverDialog.close();
+    }
+    restartGame();
+});
+
+window.addEventListener('beforeunload', () => {
+    state.videoStream?.getTracks().forEach((track) => track.stop());
+    if (state.animationFrame) {
+        cancelAnimationFrame(state.animationFrame);
+    }
+});
+
+updateHud();
 initBricks();
-setupHandTracking().catch(console.error);
+resetBall();
+renderLeaderboard();
 requestAnimationFrame(gameLoop);
+
+setupHandTracking().catch((error) => {
+    console.error(error);
+    setTrackingState('status-lost', 'Camera unavailable');
+    tutorialStatus.textContent = error.message;
+    startButton.textContent = 'Camera unavailable';
+    pauseOverlay.classList.remove('hidden');
+    pauseOverlay.innerHTML = `
+        <h2>Camera unavailable</h2>
+        <p>${escapeHtml(error.message)}</p>
+        <p>Serve the app locally, allow webcam access, and make sure the MediaPipe vendor files exist.</p>
+    `;
+});

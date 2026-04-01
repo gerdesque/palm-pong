@@ -1,0 +1,17 @@
+{
+  "name": "palm-brick-breaker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline-first hand-tracked brick breaker",
+  "scripts": {
+    "start": "http-server . -c-1",
+    "prepare-assets": "node scripts/sync-mediapipe.mjs",
+    "postinstall": "npm run prepare-assets"
+  },
+  "dependencies": {
+    "@mediapipe/hands": "^0.4.1675469240"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

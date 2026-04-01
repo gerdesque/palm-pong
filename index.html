@@ -1,127 +1,130 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Manual Brick Breaker</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-
-    <meta property="og:title" content="Manual Brick Breaker" />
-    <meta property="og:description" content="Play brick breaker with your hands!" />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://manual-brick-breaker.netlify.app/" />
-    <meta property="og:image" content="https://collidingscopes.github.io/manual-brick-breaker/assets/siteOGImage3.png">
-    <meta property="og:image:type" content="image/png" >
-    <meta property="og:image:width" content="1365" >
-    <meta property="og:image:height" content="1374" >
-  
+    <title>Palm Brick Breaker</title>
+    <meta name="description" content="An offline-first brick breaker controlled with your palm and webcam.">
+    <meta property="og:title" content="Palm Brick Breaker">
+    <meta property="og:description" content="Break bricks with hand tracking, fully offline once dependencies are installed.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="assets/siteOGImage3.png">
     <link rel="icon" href="assets/siteFavicon.png">
     <link rel="apple-touch-icon" href="assets/siteFavicon.png">
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
-
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script defer src="vendor/mediapipe/hands.js"></script>
+    <script defer src="game.js"></script>
 </head>
 <body>
-    
-    <div class="game-container-div">
-      <div class="game-container">
-          <canvas id="gameCanvas"></canvas>
-          <video id="videoElement" playsinline></video>
-          <div class="stats">
-              <div>Lives: <span id="livesElement">💛💛💛</span></div>
-              <div>Level: <span id="levelElement">1</span></div>
-              <div>Score: <span id="scoreElement">0</span></div>
-          </div>
-          <div id="levelUpIndicator" class="level-up-indicator">
-            <p class="level-up-text">LEVEL UP!</p>
-            <p class="level-up-subtitle">speed +10%, paddle size -10%</p>
-          </div>
-      </div>
+    <main class="page-shell">
+        <section class="hero">
+            <p class="eyebrow">Offline Hand-Tracked Arcade</p>
+            <h1>Palm Brick Breaker</h1>
+            <p class="hero-copy">
+                A browser game for dramatic wrist movements, tiny victories, and the deeply unserious idea
+                that arcade cabinets should have evolved into webcams and flying neon bricks.
+            </p>
+        </section>
 
-      <div class="game-footer-div">
-        <button id="restartButton" class="restart-button inline" onclick="restartGame()">Restart Game</button>
-        <a class="about-link inline" href="#aboutText">[Info]</a>
-        <a class="donate-link inline" href="https://www.buymeacoffee.com/stereoDrift" target="_blank" rel="noopener">[$]</a>
-      </div>
+        <section class="game-panel" aria-label="Game panel">
+            <div class="game-stage">
+                <canvas id="gameCanvas" aria-label="Palm Brick Breaker game board"></canvas>
+                <video id="videoElement" playsinline muted aria-label="Hand tracking camera preview"></video>
 
-      <div id="startModal" class="modal">
-          <div class="modal-content">
-              <h2>MANUAL BRICK BREAKER</h2>
-              <p>✋ Move your hand left/right, keeping your palm in front of your camera</p>
-              <p>🧱 Break all the bricks to advance to the next level</p>
-              <p>🎚️ Each level increases ball speed by 10% and reduces paddle width by 10%</p>
-              <p>👁️ Make sure your webcam is enabled and your palm is visible</p>
-              <button class="start-button" onclick="startGame()">Start Game</button>
-          </div>
-      </div>
+                <div class="hud" aria-live="polite">
+                    <div class="hud-card">
+                        <span class="hud-label">Lives</span>
+                        <span id="livesElement" class="hud-value">3</span>
+                    </div>
+                    <div class="hud-card">
+                        <span class="hud-label">Level</span>
+                        <span id="levelElement" class="hud-value">1</span>
+                    </div>
+                    <div class="hud-card">
+                        <span class="hud-label">Score</span>
+                        <span id="scoreElement" class="hud-value">0</span>
+                    </div>
+                    <div class="hud-card hud-status-card">
+                        <span class="hud-label">Tracking</span>
+                        <span id="trackingStatus" class="status-pill status-loading">Loading</span>
+                    </div>
+                </div>
 
-      <div id="gameOverModal" class="game-over-modal">
-          <div class="modal-content">
-              <button class="close-button" onclick="closeGameOverModal()">×</button>
-              <h2>Game Over!</h2>
-              <div class="stats-grid">
-                  <div class="label">Final Level:</div>
-                  <div id="finalLevel">1</div>
-                  <div class="label">Final Score:</div>
-                  <div id="finalScore">0</div>
-              </div>
-              <p class="loading-text hidden">Loading high scores, please wait...</p>
-              <button class="restart-button" onclick="restartGame()">Play Again</button>
-          </div>
-      </div>
+                <div id="pauseOverlay" class="stage-overlay hidden" role="status" aria-live="assertive">
+                    <h2>Tracking paused</h2>
+                    <p>Show your palm to the camera to keep the paddle moving.</p>
+                    <p>Try stepping back a little or tilting the camera down.</p>
+                </div>
+            </div>
 
-    </div>
-    
-    <div id="notesDiv">
-      <div id="textBox">
+            <div class="control-row">
+                <button id="startButton" class="button button-primary" type="button" disabled>Finding your hand...</button>
+                <button id="restartButton" class="button button-secondary" type="button">Restart</button>
+                <button id="toggleLeaderboardButton" class="button button-ghost" type="button" aria-expanded="false" aria-controls="leaderboardPanel">
+                    Show Leaderboard
+                </button>
+                <a class="text-link" href="#about">About</a>
+            </div>
 
-          <h2 id="aboutText">MANUAL BRICK BREAKER</h2>
-          <p>Play brick breaker the way our ancestors wanted us to -- with our hands!</p>
-          <p>✋ Move your hand left/right, keeping your palm in front of your camera</p>
-          <p>🧱 Break all the bricks to advance to the next level</p>
-          <p>🎚️ Each level increases ball speed by 10% and reduces paddle width by 10%</p>
-          <p>👁️ Make sure your webcam is enabled and your palm is visible</p>
-          <p>If you're having trouble with the hand-tracking, please try to tilt your camera down and move a bit farther from your computer. Make sure that your palm is visible to the webcam.</p>
-          <p>All processing is done in real-time within your browser. This project is built using javascript, html canvas, and mediapipe hand tracking (<a href="https://github.com/collidingScopes/manual-brick-breaker" rel="noopener" target="_blank">github code</a>).</p>
-          <p>This game is free and open source, offered under an MIT license (you can use the code for personal or commercial purposes).</p>
-          <p>If you enjoyed this and are feeling generous, feel free to buy me a coffee. I will continue to build free and open source projects, and this would be much appreciated during late-night coding sessions!</p>
-          
-          <a href="https://www.buymeacoffee.com/stereoDrift" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/yellow_img.png" alt="Buy Me A Coffee"></a>
+            <div class="tutorial-card" aria-live="polite">
+                <div class="tutorial-head">
+                    <h2>Warm-up</h2>
+                    <p id="tutorialStatus">Loading hand tracking...</p>
+                </div>
+                <div class="tutorial-meter" aria-hidden="true">
+                    <div id="palmIndicator" class="tutorial-meter-fill"></div>
+                </div>
+                <p class="tutorial-copy">
+                    Test your movement here before the first ball launches. Sweep your palm left and right until
+                    the meter responds smoothly, then start when you feel dialed in.
+                </p>
+            </div>
 
-          <p>I do not have access to any of your data or webcam video, as all processing is done "client-side" (i.e., <b>no videos or images are saved/stored by me — they appear on your computer only</b>).</p>
-          <p>If you enjoyed this, you may be interested in my other free / open source projects:</p>
-          <ul>
-            <li><a href="https://collidingScopes.github.io/ascii" target="_blank" rel="noopener">Video-to-ASCII</a>: turn videos into ASCII pixel art</li>
-            <li><a href="https://collidingScopes.github.io/shimmer" target="_blank" rel="noopener">Shape Shimmer</a>: turn photos into funky wave animations</li>
-            <li><a href="https://collidingScopes.github.io" target="_blank" rel="noopener">Colliding Scopes</a>: turn photos into kaleidoscope animations</li>
-            <li><a href="https://collidingScopes.github.io/forcefield" target="_blank" rel="noopener">Force-Field Animation</a>: turn photos into particle animations</li>
-          </ul>
-          
-          <p>Feel free to reach out to discuss, ask questions, or just to say hi! You can find me <a href="https://www.instagram.com/stereo.drift/" target="_blank" rel="noopener">@stereo.drift</a> on instagram, or through the other places below :)</p>
-      </div>
-    </div>
+            <section id="leaderboardPanel" class="leaderboard-panel hidden" aria-labelledby="leaderboardTitle">
+                <div class="leaderboard-head">
+                    <h2 id="leaderboardTitle">Local Leaderboard</h2>
+                    <p>Stored in this browser only, so the game stays fully offline.</p>
+                </div>
+                <div id="leaderboardContent" class="leaderboard-content"></div>
+            </section>
+        </section>
 
-    <div id="linksDiv">
-        <table id="infoMenuTable">
-            <tr>
-                <td><button id="gitHubButton"class="socialMediaButton"><a href="https://github.com/collidingScopes/manual-brick-breaker" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i></a></button></td>
-                <td><button id="coffeeButton" class="socialMediaButton"><a href="https://www.buymeacoffee.com/stereoDrift" target="_blank" rel="noopener"><i class="fa-solid fa-heart"></i></a></button></td>
-                <td><button id="instagramButton" class="socialMediaButton"><a href="https://www.instagram.com/stereo.drift/" target="_blank" rel="noopener"><i class="fa-brands fa-instagram"></i></a></button></td>
-                <td><button id="xButton" class="socialMediaButton"><a class="x-link" href="https://x.com/measure_plan" target="_blank" rel="noopener">𝕏</i></a></button></td>
-                <td><button id="emailButton" class="socialMediaButton"><a href="mailto:stereodriftvisuals@gmail.com" target="_blank" rel="noopener"><i class="fa-solid fa-envelope"></i></a></button></td>
-            </tr>
-        </table>
-    </div>
+        <section id="about" class="about-panel">
+            <h2>About This Fork</h2>
+            <p>
+                This edition is highly inspired by the original webcam-controlled brick-breaker idea, but rebuilt
+                as a self-contained offline project with local dependencies, local score storage, cleaner structure,
+                and a sharper arcade presentation.
+            </p>
+            <p>
+                Nothing leaves your machine during play. Camera frames stay in the browser, score history stays in
+                local storage, and the runtime no longer depends on external CDNs.
+            </p>
+            <p>
+                Controls are simple: keep your palm visible, slide left or right, and catch the ball with the paddle.
+                Each cleared board increases speed and shrinks the paddle a bit, so the game gets meaner the longer you survive.
+            </p>
+        </section>
+    </main>
 
-  </body>
-
-  <script src="config.js"></script>
-  <script src="game.js"></script>
-
+    <dialog id="gameOverDialog" class="game-over-dialog">
+        <form id="saveScoreForm" class="dialog-card" method="dialog">
+            <h2>Run Over</h2>
+            <div class="result-grid">
+                <span class="result-label">Level</span>
+                <span id="finalLevel">1</span>
+                <span class="result-label">Score</span>
+                <span id="finalScore">0</span>
+            </div>
+            <label class="input-group" for="playerNameInput">
+                <span>Name for the local board</span>
+                <input id="playerNameInput" name="playerName" type="text" maxlength="20" placeholder="Player">
+            </label>
+            <div class="dialog-actions">
+                <button id="saveScoreButton" class="button button-primary" type="submit">Save Score</button>
+                <button id="skipScoreButton" class="button button-ghost" type="button">Skip</button>
+            </div>
+        </form>
+    </dialog>
+</body>
 </html>

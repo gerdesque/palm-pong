@@ -1,27 +1,37 @@
-Manual Brick Breaker
-=======
-<img src="assets/siteOGImage3.png">
-<p>Play brick breaker the way our ancestors wanted us to -- with our hands!</p>
-<p>Live version: <a href="https://manual-brick-breaker.netlify.app/" rel="noopener" target="_blank">https://manual-brick-breaker.netlify.app/</a></p>
-<p>✋ Move your hand left/right, keeping your palm in front of your camera</p>
-<p>🧱 Break all the bricks to advance to the next level</p>
-<p>🎚️ Each level increases ball speed by 10% and reduces paddle width by 10%</p>
-<p>👁️ Make sure your webcam is enabled and your palm is visible</p>
-<p>All processing is done in real-time within your browser. This project is built using javascript, html canvas, and mediapipe hand tracking.</p>
-<p>This game is free and open source, offered under an MIT license (you can use the code for personal or commercial purposes).</p>
-<p>If you enjoyed this and are feeling generous, feel free to buy me a coffee. I will continue to build free and open source projects, and this would be much appreciated during late-night coding sessions!</p>
+# Palm Brick Breaker
 
-<a href="https://www.buymeacoffee.com/stereoDrift" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/yellow_img.png" alt="Buy Me A Coffee"></a>
+![Palm Brick Breaker preview](assets/siteOGImage3.png)
 
-<p>I do not have access to any of your data or webcam video, as all processing is done "client-side" (i.e., <b>no videos or images are saved/stored by me — they appear on your computer only</b>).</p>
-<p>If you enjoyed this, you may be interested in my other free / open source projects:</p>
-<ul>
-<li><a href="https://collidingScopes.github.io/ascii" target="_blank" rel="noopener">Video-to-ASCII</a>: turn videos into ASCII pixel art</li>
-<li><a href="https://collidingScopes.github.io/shimmer" target="_blank" rel="noopener">Shape Shimmer</a>: turn photos into funky wave animations</li>
-<li><a href="https://collidingScopes.github.io" target="_blank" rel="noopener">Colliding Scopes</a>: turn photos into kaleidoscope animations</li>
-<li><a href="https://collidingScopes.github.io/forcefield" target="_blank" rel="noopener">Force-Field Animation</a>: turn photos into particle animations</li>
-</ul>
+Palm Brick Breaker is an offline-first browser game where you control the paddle with your hand and webcam.
+This fork is highly inspired by the original camera-controlled brick-breaker concept, but it has been reworked
+to remove hosted services, install dependencies locally through `npm`, and run fully offline after setup.
 
-License
-=======
-This is an open source project provided under an <a href="https://opensource.org/license/MIT">MIT license</a>
+## Highlights
+
+- Local `npm` dependency management instead of CDN script tags
+- Fully offline gameplay after `npm install`
+- Local leaderboard stored in browser `localStorage`
+- Warm-up area to test hand tracking before starting
+- Cleaner HTML, CSS, and JavaScript structure for easier maintenance
+
+## Run locally
+
+```bash
+npm install
+npm start
+```
+
+Then open the local server URL in a browser and allow camera access.
+
+## Project scripts
+
+- `npm start` runs a local static server
+- `npm run prepare-assets` copies MediaPipe runtime files into `vendor/mediapipe`
+
+## Privacy
+
+Camera frames stay on the device. This project does not submit scores or webcam data anywhere.
+
+## License
+
+The original project was MIT-licensed, and this fork keeps that license in place.
