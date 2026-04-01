@@ -5,6 +5,24 @@ const TRACKING_SAMPLE_RATE = 1000 / 30;
 const LEVEL_SPEED_MULTIPLIER = 1.1;
 const LEVEL_PADDLE_MULTIPLIER = 0.92;
 const MAX_PADDLE_OVERSCAN = 48;
+const THUMBS_UP_HOLD_MS = 700;
+
+const COLORS = {
+    dunkelgrau: '#252525',
+    transparent: '#20202000',
+    weiss: '#f3f5f5',
+    blau: '#2a1f78',
+    orange: '#ee7202',
+    grau: '#dadada',
+    lila: '#494283',
+    hellgrau: '#e9e9e9',
+    schwarz: '#000000'
+};
+
+const HEART_SVG = `
+<svg class="heart-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  <path fill="${COLORS.orange}" d="M12 21.35 10.55 20.03C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09A6 6 0 0 1 16.5 3C19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35Z"/>
+</svg>`;
 
 const dimensions = createDimensions();
 const canvas = document.getElementById('gameCanvas');
@@ -16,10 +34,10 @@ const levelElement = document.getElementById('levelElement');
 const livesElement = document.getElementById('livesElement');
 const trackingStatus = document.getElementById('trackingStatus');
 const tutorialStatus = document.getElementById('tutorialStatus');
+const gestureStatus = document.getElementById('gestureStatus');
 const palmIndicator = document.getElementById('palmIndicator');
 const pauseOverlay = document.getElementById('pauseOverlay');
 
-const startButton = document.getElementById('startButton');
 const restartButton = document.getElementById('restartButton');
 const toggleLeaderboardButton = document.getElementById('toggleLeaderboardButton');
 const leaderboardPanel = document.getElementById('leaderboardPanel');
@@ -58,6 +76,8 @@ const state = {
     hands: null,
     videoStream: null,
     lastFrameTime: 0,
+    thumbsUpStartedAt: 0,
+    thumbsUpProgress: 0,
     notification: {
         text: '',
         until: 0,
@@ -92,8 +112,8 @@ function createDimensions() {
     return {
         compact: isCompact,
         canvas: canvasSize,
-        videoWidth: isCompact ? 96 : 176,
-        videoHeight: isCompact ? 72 : 132,
+        videoWidth: isCompact ? 240 : 288,
+        videoHeight: isCompact ? 180 : 216,
         initialPaddleWidth: isCompact ? 88 : 160,
         paddleHeight: isCompact ? 9 : 16,
         ballRadius: isCompact ? 6 : 9,
@@ -121,6 +141,7 @@ function resetBall() {
     state.ball.y = state.paddle.y - state.ball.radius - 2;
     state.ball.dx = state.ball.speed * (Math.random() > 0.5 ? 1 : -1);
     state.ball.dy = -state.ball.speed;
+    resetThumbsUpProgress();
 }
 
 function initBricks() {
@@ -141,13 +162,18 @@ function initBricks() {
 function updateHud() {
     scoreElement.textContent = String(state.stats.score);
     levelElement.textContent = String(state.stats.level);
-    livesElement.textContent = Array.from({ length: state.stats.lives }, () => '[*]').join(' ');
+    livesElement.innerHTML = Array.from({ length: state.stats.lives }, () => HEART_SVG).join('');
+    livesElement.setAttribute('aria-label', `${state.stats.lives} lives`);
 }
 
 function setTrackingState(mode, message) {
     trackingStatus.textContent = message;
     trackingStatus.className = `status-pill ${mode}`;
     tutorialStatus.textContent = message;
+}
+
+function setGestureStatus(message) {
+    gestureStatus.textContent = message;
 }
 
 function setNotification(text, tone = 'accent', duration = 1500) {
@@ -162,11 +188,12 @@ function syncPaddleWithTracking() {
 }
 
 function beginGame() {
+    if (!state.awaitingLaunch || !state.handReady || state.gameOver) return;
     state.running = true;
     state.awaitingLaunch = false;
     state.modalDismissed = true;
-    startButton.textContent = 'Tracking active';
-    startButton.disabled = true;
+    resetThumbsUpProgress();
+    setGestureStatus('Live');
     setNotification('Go!', 'accent', 900);
 }
 
@@ -176,6 +203,8 @@ function pauseForTrackingLoss() {
     state.trackingLost = true;
     pauseOverlay.classList.remove('hidden');
     setTrackingState('status-lost', 'Hand lost');
+    setGestureStatus('Show your hand');
+    resetThumbsUpProgress();
 }
 
 function resumeAfterTrackingRecovery() {
@@ -184,6 +213,7 @@ function resumeAfterTrackingRecovery() {
     state.trackingLost = false;
     pauseOverlay.classList.add('hidden');
     setTrackingState('status-ready', 'Ready');
+    setGestureStatus('Live');
 }
 
 function loseLife() {
@@ -196,6 +226,7 @@ function loseLife() {
     }
 
     resetBall();
+    setGestureStatus('Thumbs up to relaunch');
     setNotification(`${state.stats.lives} lives left`, 'warn');
 }
 
@@ -206,6 +237,7 @@ function levelUp() {
     updateHud();
     initBricks();
     resetBall();
+    setGestureStatus('Thumbs up for next level');
     setNotification(`Level ${state.stats.level}`, 'accent', 1800);
 }
 
@@ -216,6 +248,7 @@ function finishGame() {
     finalLevel.textContent = String(state.stats.level);
     finalScore.textContent = String(state.stats.score);
     playerNameInput.value = '';
+    setGestureStatus('Run over');
     if (typeof gameOverDialog.showModal === 'function' && !gameOverDialog.open) {
         gameOverDialog.showModal();
     }
@@ -242,21 +275,19 @@ function restartGame() {
     }
 
     if (state.handReady) {
-        startButton.textContent = 'Start game';
-        startButton.disabled = false;
         setTrackingState('status-ready', 'Ready');
+        setGestureStatus('Thumbs up to start');
     } else {
-        startButton.textContent = 'Finding your hand...';
-        startButton.disabled = true;
         setTrackingState('status-loading', 'Loading');
+        setGestureStatus('Show your hand');
     }
 }
 
 function drawBackground() {
-    ctx.fillStyle = '#061018';
+    ctx.fillStyle = COLORS.dunkelgrau;
     ctx.fillRect(0, 0, dimensions.canvas, dimensions.canvas);
 
-    ctx.strokeStyle = 'rgba(100, 190, 255, 0.08)';
+    ctx.strokeStyle = 'rgba(233, 233, 233, 0.08)';
     ctx.lineWidth = 1;
 
     for (let x = 0; x < dimensions.canvas; x += dimensions.compact ? 24 : 32) {
@@ -281,26 +312,26 @@ function drawBricks() {
         const x = bricks[index];
         const y = bricks[index + 1];
         const gradient = ctx.createLinearGradient(x, y, x + dimensions.brickWidth, y + dimensions.brickHeight);
-        gradient.addColorStop(0, '#ffba49');
-        gradient.addColorStop(1, '#ff6b57');
+        gradient.addColorStop(0, COLORS.orange);
+        gradient.addColorStop(1, COLORS.grau);
 
         ctx.fillStyle = gradient;
         ctx.fillRect(x, y, dimensions.brickWidth, dimensions.brickHeight);
-        ctx.strokeStyle = 'rgba(8, 20, 29, 0.4)';
+        ctx.strokeStyle = COLORS.dunkelgrau;
         ctx.strokeRect(x + 0.5, y + 0.5, dimensions.brickWidth - 1, dimensions.brickHeight - 1);
     }
 }
 
 function drawPaddleAndBall() {
     const paddleGradient = ctx.createLinearGradient(state.paddle.x, state.paddle.y, state.paddle.x + state.paddle.width, state.paddle.y);
-    paddleGradient.addColorStop(0, '#52d1ff');
-    paddleGradient.addColorStop(1, '#8cff9d');
+    paddleGradient.addColorStop(0, COLORS.lila);
+    paddleGradient.addColorStop(1, COLORS.orange);
     ctx.fillStyle = paddleGradient;
     ctx.fillRect(state.paddle.x, state.paddle.y, state.paddle.width, state.paddle.height);
 
     if (!state.ball.active) return;
 
-    ctx.fillStyle = '#f1fff5';
+    ctx.fillStyle = COLORS.weiss;
     ctx.beginPath();
     ctx.arc(state.ball.x, state.ball.y, state.ball.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -315,7 +346,7 @@ function drawCenterMessage() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = dimensions.compact ? 'bold 26px monospace' : 'bold 42px monospace';
-    ctx.fillStyle = state.notification.tone === 'warn' ? '#ffb1a8' : '#8cff9d';
+    ctx.fillStyle = state.notification.tone === 'warn' ? COLORS.orange : COLORS.hellgrau;
     ctx.fillText(state.notification.text, dimensions.canvas / 2, dimensions.canvas / 2);
     ctx.restore();
 }
@@ -326,8 +357,8 @@ function drawAwaitingLaunchHint() {
     ctx.save();
     ctx.textAlign = 'center';
     ctx.font = dimensions.compact ? '16px monospace' : '20px monospace';
-    ctx.fillStyle = 'rgba(232, 251, 255, 0.8)';
-    ctx.fillText('Warm up with your palm, then press Start', dimensions.canvas / 2, dimensions.canvas - 28);
+    ctx.fillStyle = 'rgba(243, 245, 245, 0.84)';
+    ctx.fillText('Give a thumbs up to launch', dimensions.canvas / 2, dimensions.canvas - 28);
     ctx.restore();
 }
 
@@ -433,7 +464,7 @@ function gameLoop(timestamp) {
 
 function renderLeaderboard(highlight = null) {
     if (!state.leaderboard.length) {
-        leaderboardContent.innerHTML = '<p class="empty-state">No local scores yet. Finish a run to seed the board.</p>';
+        leaderboardContent.innerHTML = '<p class="empty-state">No scores yet.</p>';
         return;
     }
 
@@ -445,7 +476,7 @@ function renderLeaderboard(highlight = null) {
                     <span class="leaderboard-rank">#${index + 1}</span>
                     <strong>${escapeHtml(entry.name)}</strong>
                     <span>${entry.score}</span>
-                    <span class="leaderboard-meta">Level ${entry.level}</span>
+                    <span class="leaderboard-meta">L${entry.level}</span>
                 </div>
             `;
         })
@@ -512,12 +543,70 @@ function applyTrackingPosition(rawX) {
     palmIndicator.style.transform = `translateX(${(normalized - 0.5) * 100}%)`;
 }
 
+function isThumbsUp(hand) {
+    const thumbTip = hand[4];
+    const thumbIp = hand[3];
+    const thumbMcp = hand[2];
+    const indexTip = hand[8];
+    const indexPip = hand[6];
+    const middleTip = hand[12];
+    const middlePip = hand[10];
+    const ringTip = hand[16];
+    const ringPip = hand[14];
+    const pinkyTip = hand[20];
+    const pinkyPip = hand[18];
+
+    const thumbExtended = thumbTip.y < thumbIp.y && thumbIp.y < thumbMcp.y;
+    const fingersCurled =
+        indexTip.y > indexPip.y &&
+        middleTip.y > middlePip.y &&
+        ringTip.y > ringPip.y &&
+        pinkyTip.y > pinkyPip.y;
+    const thumbSeparated = Math.abs(thumbTip.x - indexTip.x) > 0.08;
+
+    return thumbExtended && fingersCurled && thumbSeparated;
+}
+
+function resetThumbsUpProgress() {
+    state.thumbsUpStartedAt = 0;
+    state.thumbsUpProgress = 0;
+}
+
+function updateThumbsUpState(hand) {
+    if (!state.awaitingLaunch || state.gameOver || !state.handReady) {
+        resetThumbsUpProgress();
+        return;
+    }
+
+    if (!isThumbsUp(hand)) {
+        resetThumbsUpProgress();
+        setGestureStatus('Thumbs up to start');
+        return;
+    }
+
+    const now = performance.now();
+    if (!state.thumbsUpStartedAt) {
+        state.thumbsUpStartedAt = now;
+    }
+
+    state.thumbsUpProgress = Math.min(1, (now - state.thumbsUpStartedAt) / THUMBS_UP_HOLD_MS);
+
+    if (state.thumbsUpProgress >= 1) {
+        beginGame();
+        return;
+    }
+
+    const percent = Math.round(state.thumbsUpProgress * 100);
+    setGestureStatus(`Thumbs up ${percent}%`);
+}
+
 async function setupHandTracking() {
     if (typeof window.Hands !== 'function') {
         throw new Error('MediaPipe Hands failed to load from the local vendor folder.');
     }
 
-    setTrackingState('status-loading', 'Loading hand tracking');
+    setTrackingState('status-loading', 'Loading');
+    setGestureStatus('Show your hand');
     await initCamera();
 
     state.hands = new window.Hands({
@@ -539,14 +628,14 @@ async function setupHandTracking() {
         const hand = results.multiHandLandmarks?.[0];
         if (!hand) {
             state.noHandFrames += 1;
+            resetThumbsUpProgress();
             if (state.noHandFrames > 24) {
                 if (state.running) {
                     pauseForTrackingLoss();
                 } else {
                     state.handReady = false;
-                    startButton.disabled = true;
-                    startButton.textContent = 'Show your hand to start';
                     setTrackingState('status-lost', 'Show your hand');
+                    setGestureStatus('Show your hand');
                 }
             }
             return;
@@ -555,14 +644,19 @@ async function setupHandTracking() {
         state.noHandFrames = 0;
         state.handReady = true;
         applyTrackingPosition(hand[0].x);
+        updateThumbsUpState(hand);
 
         if (!state.trackingReady) {
             state.trackingReady = true;
-            startButton.disabled = false;
-            startButton.textContent = 'Start game';
             setTrackingState('status-ready', 'Ready');
+            setGestureStatus('Thumbs up to start');
         } else if (state.trackingLost) {
             resumeAfterTrackingRecovery();
+        } else if (!state.running && !state.awaitingLaunch) {
+            setGestureStatus('Paused');
+        } else if (!state.awaitingLaunch) {
+            setGestureStatus('Live');
+            setTrackingState('status-ready', 'Ready');
         } else {
             setTrackingState('status-ready', 'Ready');
         }
@@ -579,6 +673,7 @@ async function setupHandTracking() {
         } catch (error) {
             console.error('Hand tracking frame failed.', error);
             setTrackingState('status-lost', 'Tracking error');
+            setGestureStatus('Tracking error');
         }
 
         requestAnimationFrame(processVideo);
@@ -600,17 +695,12 @@ function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
 }
 
-startButton.addEventListener('click', () => {
-    if (!state.handReady || state.gameOver) return;
-    beginGame();
-});
-
 restartButton.addEventListener('click', restartGame);
 
 toggleLeaderboardButton.addEventListener('click', () => {
     const willShow = leaderboardPanel.classList.contains('hidden');
     leaderboardPanel.classList.toggle('hidden', !willShow);
-    toggleLeaderboardButton.textContent = willShow ? 'Hide Leaderboard' : 'Show Leaderboard';
+    toggleLeaderboardButton.textContent = willShow ? 'Hide Scores' : 'Scores';
     toggleLeaderboardButton.setAttribute('aria-expanded', String(willShow));
 });
 
@@ -621,7 +711,7 @@ saveScoreForm.addEventListener('submit', (event) => {
         gameOverDialog.close();
     }
     leaderboardPanel.classList.remove('hidden');
-    toggleLeaderboardButton.textContent = 'Hide Leaderboard';
+    toggleLeaderboardButton.textContent = 'Hide Scores';
     toggleLeaderboardButton.setAttribute('aria-expanded', 'true');
     restartGame();
 });
@@ -649,12 +739,11 @@ requestAnimationFrame(gameLoop);
 setupHandTracking().catch((error) => {
     console.error(error);
     setTrackingState('status-lost', 'Camera unavailable');
-    tutorialStatus.textContent = error.message;
-    startButton.textContent = 'Camera unavailable';
+    tutorialStatus.textContent = 'Camera unavailable';
+    setGestureStatus('Camera unavailable');
     pauseOverlay.classList.remove('hidden');
     pauseOverlay.innerHTML = `
         <h2>Camera unavailable</h2>
         <p>${escapeHtml(error.message)}</p>
-        <p>Serve the app locally, allow webcam access, and make sure the MediaPipe vendor files exist.</p>
     `;
 });
