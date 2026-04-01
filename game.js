@@ -163,7 +163,7 @@ function updateHud() {
     scoreElement.textContent = String(state.stats.score);
     levelElement.textContent = String(state.stats.level);
     livesElement.innerHTML = Array.from({ length: state.stats.lives }, () => HEART_SVG).join('');
-    livesElement.setAttribute('aria-label', `${state.stats.lives} lives`);
+    livesElement.setAttribute('aria-label', `${state.stats.lives} Leben`);
 }
 
 function setTrackingState(mode, message) {
@@ -193,7 +193,7 @@ function beginGame() {
     state.awaitingLaunch = false;
     state.modalDismissed = true;
     resetThumbsUpProgress();
-    setGestureStatus('Live');
+    setGestureStatus('Läuft');
     setNotification('Go!', 'accent', 900);
 }
 
@@ -202,8 +202,8 @@ function pauseForTrackingLoss() {
     state.running = false;
     state.trackingLost = true;
     pauseOverlay.classList.remove('hidden');
-    setTrackingState('status-lost', 'Hand lost');
-    setGestureStatus('Show your hand');
+    setTrackingState('status-lost', 'Hand weg');
+    setGestureStatus('Hand zeigen');
     resetThumbsUpProgress();
 }
 
@@ -212,8 +212,8 @@ function resumeAfterTrackingRecovery() {
     state.running = true;
     state.trackingLost = false;
     pauseOverlay.classList.add('hidden');
-    setTrackingState('status-ready', 'Ready');
-    setGestureStatus('Live');
+    setTrackingState('status-ready', 'Bereit');
+    setGestureStatus('Läuft');
 }
 
 function loseLife() {
@@ -226,8 +226,8 @@ function loseLife() {
     }
 
     resetBall();
-    setGestureStatus('Thumbs up to relaunch');
-    setNotification(`${state.stats.lives} lives left`, 'warn');
+    setGestureStatus('Daumen hoch');
+    setNotification(`${state.stats.lives} Leben übrig`, 'warn');
 }
 
 function levelUp() {
@@ -237,7 +237,7 @@ function levelUp() {
     updateHud();
     initBricks();
     resetBall();
-    setGestureStatus('Thumbs up for next level');
+    setGestureStatus('Daumen hoch fürs nächste Level');
     setNotification(`Level ${state.stats.level}`, 'accent', 1800);
 }
 
@@ -248,7 +248,7 @@ function finishGame() {
     finalLevel.textContent = String(state.stats.level);
     finalScore.textContent = String(state.stats.score);
     playerNameInput.value = '';
-    setGestureStatus('Run over');
+    setGestureStatus('Runde vorbei');
     if (typeof gameOverDialog.showModal === 'function' && !gameOverDialog.open) {
         gameOverDialog.showModal();
     }
@@ -275,11 +275,11 @@ function restartGame() {
     }
 
     if (state.handReady) {
-        setTrackingState('status-ready', 'Ready');
-        setGestureStatus('Thumbs up to start');
+        setTrackingState('status-ready', 'Bereit');
+        setGestureStatus('Daumen hoch');
     } else {
-        setTrackingState('status-loading', 'Loading');
-        setGestureStatus('Show your hand');
+        setTrackingState('status-loading', 'Lädt');
+        setGestureStatus('Hand zeigen');
     }
 }
 
@@ -357,8 +357,8 @@ function drawAwaitingLaunchHint() {
     ctx.save();
     ctx.textAlign = 'center';
     ctx.font = dimensions.compact ? '16px monospace' : '20px monospace';
-    ctx.fillStyle = 'rgba(243, 245, 245, 0.84)';
-    ctx.fillText('Give a thumbs up to launch', dimensions.canvas / 2, dimensions.canvas - 28);
+    ctx.fillStyle = 'rgba(42, 31, 120, 0.84)';
+    ctx.fillText('Daumen hoch', dimensions.canvas / 2, dimensions.canvas - 28);
     ctx.restore();
 }
 
@@ -457,14 +457,14 @@ function gameLoop(timestamp) {
     drawBricks();
     drawPaddleAndBall();
     drawCenterMessage();
-    drawAwaitingLaunchHint();
+    //drawAwaitingLaunchHint();
 
     state.animationFrame = requestAnimationFrame(gameLoop);
 }
 
 function renderLeaderboard(highlight = null) {
     if (!state.leaderboard.length) {
-        leaderboardContent.innerHTML = '<p class="empty-state">No scores yet.</p>';
+        leaderboardContent.innerHTML = '<p class="empty-state">Noch keine Einträge.</p>';
         return;
     }
 
@@ -476,7 +476,7 @@ function renderLeaderboard(highlight = null) {
                     <span class="leaderboard-rank">#${index + 1}</span>
                     <strong>${escapeHtml(entry.name)}</strong>
                     <span>${entry.score}</span>
-                    <span class="leaderboard-meta">L${entry.level}</span>
+                    <span class="leaderboard-meta">Level ${entry.level}</span>
                 </div>
             `;
         })
@@ -504,7 +504,7 @@ function saveLeaderboard() {
 function submitLocalScore(name) {
     const entry = {
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        name: name.trim() || 'Player',
+        name: name.trim() || 'Spieler',
         score: state.stats.score,
         level: state.stats.level
     };
@@ -519,7 +519,7 @@ function submitLocalScore(name) {
 
 async function initCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('Camera access is not supported in this browser.');
+        throw new Error('Kamerazugriff wird in diesem Browser nicht unterstützt.');
     }
 
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -580,7 +580,7 @@ function updateThumbsUpState(hand) {
 
     if (!isThumbsUp(hand)) {
         resetThumbsUpProgress();
-        setGestureStatus('Thumbs up to start');
+        setGestureStatus('Daumen hoch');
         return;
     }
 
@@ -597,7 +597,7 @@ function updateThumbsUpState(hand) {
     }
 
     const percent = Math.round(state.thumbsUpProgress * 100);
-    setGestureStatus(`Thumbs up ${percent}%`);
+    setGestureStatus(`Daumen hoch ${percent}%`);
 }
 
 async function setupHandTracking() {
@@ -605,8 +605,8 @@ async function setupHandTracking() {
         throw new Error('MediaPipe Hands failed to load from the local vendor folder.');
     }
 
-    setTrackingState('status-loading', 'Loading');
-    setGestureStatus('Show your hand');
+    setTrackingState('status-loading', 'Lädt');
+    setGestureStatus('Hand zeigen');
     await initCamera();
 
     state.hands = new window.Hands({
@@ -634,8 +634,8 @@ async function setupHandTracking() {
                     pauseForTrackingLoss();
                 } else {
                     state.handReady = false;
-                    setTrackingState('status-lost', 'Show your hand');
-                    setGestureStatus('Show your hand');
+                    setTrackingState('status-lost', 'Hand zeigen');
+                    setGestureStatus('Hand zeigen');
                 }
             }
             return;
@@ -648,17 +648,17 @@ async function setupHandTracking() {
 
         if (!state.trackingReady) {
             state.trackingReady = true;
-            setTrackingState('status-ready', 'Ready');
-            setGestureStatus('Thumbs up to start');
+            setTrackingState('status-ready', 'Bereit');
+            setGestureStatus('Daumen hoch');
         } else if (state.trackingLost) {
             resumeAfterTrackingRecovery();
         } else if (!state.running && !state.awaitingLaunch) {
-            setGestureStatus('Paused');
+            setGestureStatus('Pausiert');
         } else if (!state.awaitingLaunch) {
-            setGestureStatus('Live');
-            setTrackingState('status-ready', 'Ready');
+            setGestureStatus('Läuft');
+            setTrackingState('status-ready', 'Bereit');
         } else {
-            setTrackingState('status-ready', 'Ready');
+            setTrackingState('status-ready', 'Bereit');
         }
     });
 
@@ -672,8 +672,8 @@ async function setupHandTracking() {
             await state.hands.send({ image: video });
         } catch (error) {
             console.error('Hand tracking frame failed.', error);
-            setTrackingState('status-lost', 'Tracking error');
-            setGestureStatus('Tracking error');
+            setTrackingState('status-lost', 'Trackingfehler');
+            setGestureStatus('Trackingfehler');
         }
 
         requestAnimationFrame(processVideo);
@@ -700,7 +700,7 @@ restartButton.addEventListener('click', restartGame);
 toggleLeaderboardButton.addEventListener('click', () => {
     const willShow = leaderboardPanel.classList.contains('hidden');
     leaderboardPanel.classList.toggle('hidden', !willShow);
-    toggleLeaderboardButton.textContent = willShow ? 'Hide Scores' : 'Scores';
+    toggleLeaderboardButton.textContent = willShow ? 'Ausblenden' : 'Bestenliste';
     toggleLeaderboardButton.setAttribute('aria-expanded', String(willShow));
 });
 
@@ -711,7 +711,7 @@ saveScoreForm.addEventListener('submit', (event) => {
         gameOverDialog.close();
     }
     leaderboardPanel.classList.remove('hidden');
-    toggleLeaderboardButton.textContent = 'Hide Scores';
+    toggleLeaderboardButton.textContent = 'Ausblenden';
     toggleLeaderboardButton.setAttribute('aria-expanded', 'true');
     restartGame();
 });
@@ -738,12 +738,12 @@ requestAnimationFrame(gameLoop);
 
 setupHandTracking().catch((error) => {
     console.error(error);
-    setTrackingState('status-lost', 'Camera unavailable');
-    tutorialStatus.textContent = 'Camera unavailable';
-    setGestureStatus('Camera unavailable');
+    setTrackingState('status-lost', 'Kamera nicht verfügbar');
+    tutorialStatus.textContent = 'Kamera nicht verfügbar';
+    setGestureStatus('Kamera nicht verfügbar');
     pauseOverlay.classList.remove('hidden');
     pauseOverlay.innerHTML = `
-        <h2>Camera unavailable</h2>
+        <h2>Kamera nicht verfügbar</h2>
         <p>${escapeHtml(error.message)}</p>
     `;
 });

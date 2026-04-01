@@ -1,6 +1,6 @@
-# Palm Brick Breaker
+# Palm-Pong
 
-![Palm Brick Breaker preview](assets/siteOGImage3.png)
+![Palm-Pong preview](assets/siteOGImage3.png)
 
 Palm Brick Breaker is an offline-first browser game where you control the paddle with your hand and webcam.
 This fork is highly inspired by the original camera-controlled brick-breaker concept, but it has been reworked

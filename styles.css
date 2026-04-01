@@ -20,10 +20,11 @@ body {
     margin: 0;
     min-height: 100vh;
     font-family: "Courier New", Consolas, monospace;
-    color: var(--weiss);
+    color: var(--dunkelgrau);
     background:
-        radial-gradient(circle at top right, rgba(238, 114, 2, 0.18), var(--transparent) 30%),
-        linear-gradient(180deg, var(--lila) 0%, var(--blau) 42%, var(--dunkelgrau) 100%);
+        radial-gradient(circle at top right, rgba(238, 114, 2, 0.14), var(--transparent) 28%),
+        radial-gradient(circle at top left, rgba(42, 31, 120, 0.1), var(--transparent) 34%),
+        linear-gradient(180deg, var(--weiss) 0%, var(--hellgrau) 100%);
 }
 
 button,
@@ -45,7 +46,7 @@ video {
 .leaderboard-panel,
 .camera-panel,
 .dialog-card {
-    border: 1px solid var(--grau);
+    border: 1px solid rgba(42, 31, 120, 0.14);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
 }
@@ -57,15 +58,14 @@ video {
     gap: 16px;
     padding: 20px 24px;
     margin-bottom: 18px;
-    background: rgba(37, 37, 37, 0.74);
+    background: rgba(243, 245, 245, 0.88);
 }
 
 .eyebrow {
     margin: 0 0 8px;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    color: var(--hellgrau);
-    font-size: 0.8rem;
+    color: var(--blau);
 }
 
 .hero h1,
@@ -82,7 +82,7 @@ video {
 .leaderboard-meta,
 .empty-state,
 .result-label {
-    color: var(--grau);
+    color: var(--lila);
 }
 
 .game-layout {
@@ -96,7 +96,7 @@ video {
     display: grid;
     gap: 16px;
     padding: 16px;
-    background: rgba(37, 37, 37, 0.78);
+    background: rgba(243, 245, 245, 0.92);
 }
 
 .hud {
@@ -107,19 +107,19 @@ video {
 .hud-card,
 .camera-panel,
 .leaderboard-panel {
-    background: rgba(73, 66, 131, 0.32);
+    background: rgba(243, 245, 245, 0.94);
 }
 
 .hud-card {
     padding: 12px 14px;
-    border: 1px solid rgba(243, 245, 245, 0.2);
+    border: 1px solid rgba(42, 31, 120, 0.12);
     border-radius: 16px;
 }
 
 .hud-label {
     display: block;
     margin-bottom: 6px;
-    color: var(--hellgrau);
+    color: var(--lila);
     font-size: 0.8rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -127,7 +127,7 @@ video {
 
 .hud-value {
     font-size: 1.25rem;
-    color: var(--weiss);
+    color: var(--dunkelgrau);
 }
 
 .hearts-row {
@@ -150,22 +150,22 @@ video {
     min-height: 1.9rem;
     padding: 0.2rem 0.75rem;
     border-radius: 999px;
-    border: 1px solid rgba(243, 245, 245, 0.18);
+    border: 1px solid rgba(42, 31, 120, 0.16);
 }
 
 .status-loading {
-    color: var(--weiss);
-    background: rgba(73, 66, 131, 0.68);
+    color: var(--blau);
+    background: rgba(42, 31, 120, 0.08);
 }
 
 .status-ready {
     color: var(--weiss);
-    background: rgba(42, 31, 120, 0.9);
+    background: rgba(42, 31, 120, 0.92);
 }
 
 .status-lost {
     color: var(--weiss);
-    background: rgba(238, 114, 2, 0.78);
+    background: rgba(238, 114, 2, 0.9);
 }
 
 .camera-panel {
@@ -186,7 +186,7 @@ video {
 }
 
 .camera-frame {
-    border: 1px solid rgba(243, 245, 245, 0.18);
+    border: 1px solid rgba(42, 31, 120, 0.12);
     border-radius: 18px;
     background: var(--schwarz);
     overflow: hidden;
@@ -205,8 +205,8 @@ video {
     margin: 14px 0 10px;
     overflow: hidden;
     border-radius: 999px;
-    border: 1px solid rgba(243, 245, 245, 0.18);
-    background: rgba(243, 245, 245, 0.08);
+    border: 1px solid rgba(42, 31, 120, 0.12);
+    background: rgba(42, 31, 120, 0.06);
 }
 
 .tutorial-meter-fill {
@@ -224,7 +224,7 @@ video {
 }
 
 .button {
-    border: 1px solid rgba(243, 245, 245, 0.22);
+    border: 1px solid rgba(42, 31, 120, 0.16);
     border-radius: 999px;
     padding: 0.82rem 1.1rem;
     cursor: pointer;
@@ -242,26 +242,26 @@ video {
 }
 
 .button-secondary {
-    background: var(--lila);
+    background: var(--blau);
     color: var(--weiss);
 }
 
 .button-ghost {
-    background: rgba(243, 245, 245, 0.06);
-    color: var(--weiss);
+    background: rgba(42, 31, 120, 0.06);
+    color: var(--blau);
 }
 
 .game-panel {
     padding: 12px;
-    background: rgba(37, 37, 37, 0.82);
+    background: rgba(243, 245, 245, 0.96);
 }
 
 .game-stage {
     position: relative;
     overflow: hidden;
     border-radius: 18px;
-    border: 1px solid rgba(243, 245, 245, 0.18);
-    background: linear-gradient(180deg, rgba(73, 66, 131, 0.45), rgba(42, 31, 120, 0.65));
+    border: 1px solid rgba(42, 31, 120, 0.14);
+    background: linear-gradient(180deg, rgba(233, 233, 233, 0.96), rgba(218, 218, 218, 0.96));
 }
 
 #gameCanvas {
@@ -275,8 +275,8 @@ video {
     inset: auto 18px 18px 18px;
     padding: 16px;
     border-radius: 18px;
-    border: 1px solid rgba(243, 245, 245, 0.18);
-    background: rgba(37, 37, 37, 0.92);
+    border: 1px solid rgba(42, 31, 120, 0.14);
+    background: rgba(243, 245, 245, 0.96);
 }
 
 .stage-overlay h2,
@@ -286,7 +286,7 @@ video {
 
 .stage-overlay p {
     margin-top: 6px;
-    color: var(--grau);
+    color: var(--lila);
 }
 
 .leaderboard-panel {
@@ -309,8 +309,8 @@ video {
     align-items: center;
     padding: 12px;
     border-radius: 16px;
-    border: 1px solid rgba(243, 245, 245, 0.16);
-    background: rgba(42, 31, 120, 0.34);
+    border: 1px solid rgba(42, 31, 120, 0.12);
+    background: rgba(42, 31, 120, 0.05);
 }
 
 .leaderboard-row-highlight {
@@ -335,7 +335,7 @@ video {
 .dialog-card {
     min-width: min(92vw, 420px);
     padding: 24px;
-    background: rgba(37, 37, 37, 0.96);
+    background: rgba(243, 245, 245, 0.98);
 }
 
 .result-grid {
@@ -354,10 +354,10 @@ video {
 .input-group input {
     width: 100%;
     padding: 0.85rem 1rem;
-    border: 1px solid rgba(243, 245, 245, 0.18);
+    border: 1px solid rgba(42, 31, 120, 0.16);
     border-radius: 14px;
-    background: rgba(243, 245, 245, 0.06);
-    color: var(--weiss);
+    background: rgba(42, 31, 120, 0.04);
+    color: var(--dunkelgrau);
 }
 
 .dialog-actions {
