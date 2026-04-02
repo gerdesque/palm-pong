@@ -5,7 +5,9 @@ const TRACKING_SAMPLE_RATE = 1000 / 30;
 const LEVEL_SPEED_MULTIPLIER = 1.1;
 const LEVEL_PADDLE_MULTIPLIER = 0.92;
 const MAX_PADDLE_OVERSCAN = 48;
-const THUMBS_UP_HOLD_MS = 700;
+const THUMBS_UP_HOLD_MS = 450;
+const THUMBS_UP_GRACE_MS = 180;
+const THUMBS_UP_DECAY_MS = 420;
 
 const COLORS = {
     dunkelgrau: '#252525',
@@ -76,8 +78,10 @@ const state = {
     hands: null,
     videoStream: null,
     lastFrameTime: 0,
-    thumbsUpStartedAt: 0,
+    thumbsUpHoldMs: 0,
     thumbsUpProgress: 0,
+    thumbsUpLastSeenAt: 0,
+    thumbsUpLastUpdateAt: 0,
     notification: {
         text: '',
         until: 0,
@@ -568,8 +572,10 @@ function isThumbsUp(hand) {
 }
 
 function resetThumbsUpProgress() {
-    state.thumbsUpStartedAt = 0;
+    state.thumbsUpHoldMs = 0;
     state.thumbsUpProgress = 0;
+    state.thumbsUpLastSeenAt = 0;
+    state.thumbsUpLastUpdateAt = 0;
 }
 
 function updateThumbsUpState(hand) {
@@ -578,21 +584,35 @@ function updateThumbsUpState(hand) {
         return;
     }
 
-    if (!isThumbsUp(hand)) {
-        resetThumbsUpProgress();
-        setGestureStatus('Daumen hoch');
-        return;
-    }
-
     const now = performance.now();
-    if (!state.thumbsUpStartedAt) {
-        state.thumbsUpStartedAt = now;
+    if (!state.thumbsUpLastUpdateAt) {
+        state.thumbsUpLastUpdateAt = now;
     }
 
-    state.thumbsUpProgress = Math.min(1, (now - state.thumbsUpStartedAt) / THUMBS_UP_HOLD_MS);
+    const delta = now - state.thumbsUpLastUpdateAt;
+    state.thumbsUpLastUpdateAt = now;
+
+    if (isThumbsUp(hand)) {
+        state.thumbsUpLastSeenAt = now;
+        state.thumbsUpHoldMs = Math.min(THUMBS_UP_HOLD_MS, state.thumbsUpHoldMs + delta);
+    } else {
+        const withinGraceWindow = state.thumbsUpLastSeenAt && now - state.thumbsUpLastSeenAt <= THUMBS_UP_GRACE_MS;
+
+        if (!withinGraceWindow) {
+            const decayStep = delta * (THUMBS_UP_HOLD_MS / THUMBS_UP_DECAY_MS);
+            state.thumbsUpHoldMs = Math.max(0, state.thumbsUpHoldMs - decayStep);
+        }
+    }
+
+    state.thumbsUpProgress = state.thumbsUpHoldMs / THUMBS_UP_HOLD_MS;
 
     if (state.thumbsUpProgress >= 1) {
         beginGame();
+        return;
+    }
+
+    if (state.thumbsUpProgress <= 0) {
+        setGestureStatus('Daumen hoch');
         return;
     }
 
