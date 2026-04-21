@@ -19,6 +19,7 @@
 body {
     margin: 0;
     min-height: 100vh;
+    overflow: visible;
     font-family: "Courier New", Consolas, monospace;
     color: var(--dunkelgrau);
     background:
@@ -37,7 +38,7 @@ video {
 .page-shell {
     width: min(1220px, calc(100vw - 32px));
     margin: 0 auto;
-    padding: 24px 0 32px;
+    padding: 8px 0;
 }
 
 .hero,
@@ -57,8 +58,12 @@ video {
     align-items: end;
     gap: 16px;
     padding: 20px 24px;
-    margin-bottom: 18px;
+    margin-bottom: 8px;
     background: rgba(243, 245, 245, 0.88);
+}
+
+h2 {
+    margin: 0;
 }
 
 .eyebrow {
@@ -94,14 +99,14 @@ video {
 
 .sidebar {
     display: grid;
-    gap: 16px;
-    padding: 16px;
+    gap: 8px;
+    padding: 8px;
     background: rgba(243, 245, 245, 0.92);
 }
 
 .hud {
     display: grid;
-    gap: 12px;
+    gap: 8px;
 }
 
 .hud-card,
@@ -111,7 +116,7 @@ video {
 }
 
 .hud-card {
-    padding: 12px 14px;
+    padding: 8px;
     border: 1px solid rgba(42, 31, 120, 0.12);
     border-radius: 16px;
 }
@@ -175,9 +180,9 @@ video {
 .camera-head {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: 8px;
     align-items: baseline;
-    margin-bottom: 12px;
+    margin-bottom:8px;
 }
 
 .camera-head p,
@@ -202,7 +207,7 @@ video {
 
 .tutorial-meter {
     height: 16px;
-    margin: 14px 0 10px;
+    margin: 8px 0;
     overflow: hidden;
     border-radius: 999px;
     border: 1px solid rgba(42, 31, 120, 0.12);
@@ -219,14 +224,14 @@ video {
 
 .control-row {
     display: flex;
-    gap: 12px;
+    gap: 8px;
     flex-wrap: wrap;
 }
 
 .button {
     border: 1px solid rgba(42, 31, 120, 0.16);
     border-radius: 999px;
-    padding: 0.82rem 1.1rem;
+    padding: 1rem;
     cursor: pointer;
     transition: transform 0.16s ease, background 0.16s ease;
 }

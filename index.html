@@ -17,16 +17,14 @@
 </head>
 <body>
     <main class="page-shell">
-        <header class="hero">
-            <div>
-                <h1 class="eyebrow">Palm-Pong</h1>
-                <h2>Daumen hoch zum Start</h2>
-            </div>
-            <p id="tutorialStatus" class="hero-status">Handerkennung lädt...</p>
-        </header>
-
         <section class="game-layout" aria-label="Game layout">
             <section class="sidebar" aria-label="Spielstatus">
+                <header class="hero">
+                    <div>
+                        <h1 class="eyebrow">Palm-Pong</h1>
+                    </div>
+                    <p id="tutorialStatus" class="hero-status">Handerkennung lädt...</p>
+                </header>
                 <div class="hud" aria-live="polite">
                     <div class="hud-card">
                         <span class="hud-label">Leben</span>
@@ -40,7 +38,7 @@
                         <span class="hud-label">Punkte</span>
                         <span id="scoreElement" class="hud-value">0</span>
                     </div>
-                    <div class="hud-card">
+                    <div class="hud-card" style="display: none;">
                         <span class="hud-label">Tracking</span>
                         <span id="trackingStatus" class="status-pill status-loading">Lädt</span>
                     </div>
@@ -57,7 +55,7 @@
                     <div class="tutorial-meter" aria-hidden="true">
                         <div id="palmIndicator" class="tutorial-meter-fill"></div>
                     </div>
-                    <p class="micro-copy">Hand nach links und rechts bewegen. Mit Daumen hoch starten.</p>
+                    <p class="micro-copy">Hand nach links und rechts bewegen</p>
                 </section>
 
                 <div class="control-row">
