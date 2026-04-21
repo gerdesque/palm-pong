@@ -257,7 +257,7 @@ h2 {
 }
 
 .game-panel {
-    padding: 12px;
+    padding: 8px;
     background: rgba(243, 245, 245, 0.96);
 }
 
@@ -272,7 +272,7 @@ h2 {
 #gameCanvas {
     display: block;
     width: 100%;
-    height: auto;
+    height: 95vh;
 }
 
 .stage-overlay {
